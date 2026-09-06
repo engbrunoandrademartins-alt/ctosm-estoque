@@ -276,6 +276,10 @@ canvas.sig{width:100%;height:110px;background:#fff;border-radius:4px;touch-actio
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="CTOSM">
 <link rel="apple-touch-icon" href="icon-192.png">
+
+<script src="./supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 </head>
 <body>
 <header class="app-header">
@@ -307,7 +311,7 @@ canvas.sig{width:100%;height:110px;background:#fff;border-radius:4px;touch-actio
       <strong>PAINEL CTOSM — Gestão de Estoque e Manutenção</strong>
       <span class="v2-chip v2-live"><i></i> Sistema operacional</span>
       <span class="v2-chip" id="v2-user-chip">Usuário: —</span>
-      <span class="v2-chip" id="v2-sync-chip">Sincronização: local</span>
+      <span class="v2-chip" id="v2-sync-chip">Carregando banco…</span>
     </div>
 
     <div class="v2-dashboard">
@@ -348,6 +352,87 @@ canvas.sig{width:100%;height:110px;background:#fff;border-radius:4px;touch-actio
 
 <script>
 'use strict';
+
+/* =========================================================
+   CTOSM ONLINE BACKEND — Supabase
+   Mantém a interface/estado do sistema e troca apenas a
+   camada de persistência por banco + Storage + Realtime.
+   ========================================================= */
+const CTOSM_CONFIG = window.CTOSM_SUPABASE_CONFIG || {};
+const CTOSM_ONLINE_URL = String(CTOSM_CONFIG.url || '').trim();
+const CTOSM_ONLINE_KEY = String(CTOSM_CONFIG.key || '').trim();
+const CTOSM_ONLINE_ENABLED = !!(
+  window.supabase &&
+  /^https:\/\/.+\.supabase\.co\/?$/.test(CTOSM_ONLINE_URL) &&
+  CTOSM_ONLINE_KEY.startsWith('sb_publishable_')
+);
+const CTOSM_BUCKET = 'ctosm-arquivos';
+let CTOSM_DB = CTOSM_ONLINE_ENABLED
+  ? window.supabase.createClient(CTOSM_ONLINE_URL, CTOSM_ONLINE_KEY)
+  : null;
+let CTOSM_REALTIME_CHANNEL = null;
+
+function ctosmBackendStatus(texto) {
+  const el = document.getElementById('v2-sync-chip');
+  if (el) el.textContent = texto;
+}
+
+function ctosmAssertOnline() {
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    ctosmBackendStatus('⚠️ Banco online não configurado');
+    throw new Error('Supabase não configurado. Verifique supabase-config.js.');
+  }
+}
+
+function ctosmLocalKey(tipo, chave) {
+  return 'ctosm-local:' + tipo + ':' + chave;
+}
+
+async function ctosmLocalSave(tipo, chave, payload) {
+  try {
+    localStorage.setItem(ctosmLocalKey(tipo, chave), JSON.stringify(payload));
+    return true;
+  } catch (e) { return false; }
+}
+
+async function ctosmLocalLoad(tipo) {
+  const arr = [];
+  const prefix = 'ctosm-local:' + tipo + ':';
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith(prefix)) continue;
+    try { arr.push(JSON.parse(localStorage.getItem(k))); } catch (e) {}
+  }
+  return arr;
+}
+
+function ctosmSetupRealtime() {
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB || CTOSM_REALTIME_CHANNEL) return;
+  CTOSM_REALTIME_CHANNEL = CTOSM_DB.channel('ctosm-store-realtime')
+    .on('postgres_changes',
+      {event:'*', schema:'public', table:'ctosm_store'},
+      async () => {
+        if (typeof haRascunhoAtendimentoEmAndamento === 'function' && haRascunhoAtendimentoEmAndamento()) return;
+        try {
+          await loadData(true);
+          if (typeof render === 'function') render();
+          ctosmBackendStatus('🟢 Online · sincronizado');
+        } catch (e) {
+          console.warn('CTOSM realtime:', e);
+        }
+      })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') ctosmBackendStatus('🟢 Online · tempo real');
+    });
+}
+
+if (CTOSM_ONLINE_ENABLED) {
+  ctosmBackendStatus('🟢 Banco online');
+  setTimeout(ctosmSetupRealtime, 0);
+} else {
+  ctosmBackendStatus('⚠️ Banco online não configurado');
+}
+
 
 /* ============ Domínio ============ */
 const CATEGORIAS = {
@@ -528,144 +613,165 @@ function listaUnidadesSugeridas() {
   return [...UNIDADES_SAUDE_CUIABA, ...extras].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 }
 
-/* ============ Storage: registros individuais, compartilhados ============
-   Cada material / movimentação / equipamento / atendimento é gravado na
-   sua própria chave (prefixo:id), em armazenamento compartilhado
-   (shared=true). Isso é o que permite vários usuários lançando ao mesmo
-   tempo sem que um sobrescreva o trabalho do outro — antes tudo vivia
-   dentro de um único blob JSON pessoal, e quem salvasse por último
-   apagava as mudanças de quem tivesse salvo um instante antes. */
-/* Toda leitura tenta de novo algumas vezes antes de desistir — com muitas
-   chaves individuais (uma por material/movimentação/atendimento), uma
-   rajada de leituras pode esbarrar em limite de requisições e falhar
-   isoladamente por instante; sem isso, um item que falhou parecia
-   simplesmente "não existir". */
-async function storageGetComRetry(key, shared, tentativas) {
-  tentativas = tentativas || 3;
-  for (let i = 0; i < tentativas; i++) {
-    try {
-      const r = await window.storage.get(key, shared);
-      if (r) return r;
-    } catch (e) {}
-    if (i < tentativas - 1) await new Promise(res => setTimeout(res, 250 * (i + 1)));
-  }
-  return null;
+
+/* ============ Persistência online ============ 
+   Tabela: public.ctosm_store
+   Campos: chave (PK), tipo, payload, atualizado_em
+   Mantemos os IDs/objetos do app exatamente como estão.
+*/
+function ctosmTipoPorPrefixo(prefixo) {
+  return String(prefixo || '').replace(/:$/, '');
 }
-async function storageListComRetry(prefix, shared, tentativas) {
-  tentativas = tentativas || 3;
-  for (let i = 0; i < tentativas; i++) {
-    try {
-      const r = await window.storage.list(prefix, shared);
-      if (r && r.keys) return r;
-    } catch (e) {}
-    if (i < tentativas - 1) await new Promise(res => setTimeout(res, 250 * (i + 1)));
-  }
-  return { keys: [] };
-}
+
 async function carregarPrefixo(prefixo) {
-  const lista = [];
-  const res = await storageListComRetry(prefixo + ':', true);
-  for (const key of res.keys) {
-    const r = await storageGetComRetry(key, true);
-    if (r && r.value) {
-      try { lista.push(JSON.parse(r.value)); } catch (e) {}
-    }
+  const tipo = ctosmTipoPorPrefixo(prefixo);
+
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    return ctosmLocalLoad(tipo);
   }
-  return lista;
+
+  const { data, error } = await CTOSM_DB
+    .from('ctosm_store')
+    .select('chave,tipo,payload,atualizado_em')
+    .eq('tipo', tipo)
+    .order('atualizado_em', {ascending:true});
+
+  if (error) {
+    console.error('CTOSM carregarPrefixo:', error);
+    throw error;
+  }
+  return (data || []).map(r => r.payload).filter(Boolean);
 }
+
 async function salvarRegistro(prefixo, obj) {
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
-    try {
-      const result = await window.storage.set(prefixo + ':' + obj.id, JSON.stringify(obj), true);
-      if (result) return result;
-    } catch (e) {}
-    if (tentativa < 2) await new Promise(res => setTimeout(res, 300 * (tentativa + 1)));
+  const tipo = ctosmTipoPorPrefixo(prefixo);
+  const chave = `${tipo}:${obj.id}`;
+
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    const ok = await ctosmLocalSave(tipo, chave, obj);
+    if (!ok) throw new Error('Não foi possível salvar localmente.');
+    return { local:true };
   }
-  showToast('Não foi possível salvar um item. Tente novamente.');
-  return null;
+
+  const { data, error } = await CTOSM_DB
+    .from('ctosm_store')
+    .upsert({
+      chave,
+      tipo,
+      payload: obj,
+      atualizado_em: new Date().toISOString()
+    }, {onConflict:'chave'})
+    .select()
+    .single();
+
+  if (error) {
+    console.error('CTOSM salvarRegistro:', error);
+    throw error;
+  }
+
+  return data;
 }
+
 async function excluirRegistroStorage(prefixo, id) {
-  try { await window.storage.delete(prefixo + ':' + id, true); } catch (e) {}
-}
-/* Grava uma lista de registros aos poucos (em lotes pequenos, com uma
-   pausa entre eles) em vez de disparar tudo de uma vez com Promise.all.
-   Ao abrir o app pela primeira vez, tentar gravar as dezenas de materiais
-   simultaneamente fazia o servidor recusar boa parte com erro de conflito
-   (409) — gravar em lotes evita sobrecarregar o servidor. */
-async function salvarEmLote(itens, prefixo, tamanhoDoLote) {
-  tamanhoDoLote = tamanhoDoLote || 6;
-  for (let i = 0; i < itens.length; i += tamanhoDoLote) {
-    const lote = itens.slice(i, i + tamanhoDoLote);
-    await Promise.all(lote.map(obj => salvarRegistro(prefixo, obj)));
-    if (i + tamanhoDoLote < itens.length) await new Promise(res => setTimeout(res, 200));
+  const tipo = ctosmTipoPorPrefixo(prefixo);
+  const chave = `${tipo}:${id}`;
+
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    try { localStorage.removeItem(ctosmLocalKey(tipo, chave)); } catch (e) {}
+    return;
+  }
+
+  const { error } = await CTOSM_DB
+    .from('ctosm_store')
+    .delete()
+    .eq('chave', chave);
+
+  if (error) {
+    console.error('CTOSM excluirRegistroStorage:', error);
+    throw error;
   }
 }
 
-/* Junta o que já estava em memória com o que acabou de vir do servidor,
-   por id — nunca remove algo que já tínhamos só porque uma leitura falhou
-   dessa vez. Uma exclusão de verdade já é removida da memória no próprio
-   momento em que acontece (ver excluirAtendimento etc.), então isso não
-   "ressuscita" nada que foi apagado de propósito nesta mesma sessão. */
+async function salvarEmLote(itens, prefixo, tamanhoDoLote) {
+  tamanhoDoLote = tamanhoDoLote || 8;
+  for (let i = 0; i < itens.length; i += tamanhoDoLote) {
+    const lote = itens.slice(i, i + tamanhoDoLote);
+    for (const obj of lote) await salvarRegistro(prefixo, obj);
+  }
+}
+
 function mesclarPorId(atual, novo) {
   const mapa = new Map(atual.map(x => [x.id, x]));
   novo.forEach(x => mapa.set(x.id, x));
   return Array.from(mapa.values());
 }
 
-async function loadData() {
-  const [mats, movs, maqs, maqMs, ats] = await Promise.all([
-    carregarPrefixo('material'), carregarPrefixo('mov'), carregarPrefixo('maquinario'),
-    carregarPrefixo('maqmov'), carregarPrefixo('atendimento')
-  ]);
-  materiais = mesclarPorId(materiais, mats);
-  movimentacoes = mesclarPorId(movimentacoes, movs);
-  maquinarios = mesclarPorId(maquinarios, maqs);
-  maqMovs = mesclarPorId(maqMovs, maqMs);
-  atendimentos = mesclarPorId(atendimentos, ats);
+let CTOSM_LOAD_LOCK = false;
+async function loadData(silent) {
+  if (CTOSM_LOAD_LOCK) return;
+  CTOSM_LOAD_LOCK = true;
+  try {
+    const [mats, movs, maqs, maqMs, ats] = await Promise.all([
+      carregarPrefixo('material'),
+      carregarPrefixo('mov'),
+      carregarPrefixo('maquinario'),
+      carregarPrefixo('maqmov'),
+      carregarPrefixo('atendimento')
+    ]);
 
-  if (materiais.length === 0 && movimentacoes.length === 0) {
-    let migrado = false;
-    try {
-      const antigo = await window.storage.get(OLD_STORAGE_KEY, false);
-      if (antigo && antigo.value) {
-        const parsed = JSON.parse(antigo.value);
-        materiais = parsed.materiais || [];
-        movimentacoes = parsed.movimentacoes || [];
-        maquinarios = parsed.maquinarios || [];
-        maqMovs = parsed.maqMovs || [];
-        atendimentos = parsed.atendimentos || [];
-        await salvarEmLote(materiais, 'material');
-        await salvarEmLote(movimentacoes, 'mov');
-        await salvarEmLote(maquinarios, 'maquinario');
-        await salvarEmLote(maqMovs, 'maqmov');
-        await salvarEmLote(atendimentos, 'atendimento');
-        migrado = true;
-      }
-    } catch (e) {}
-    if (!migrado) {
-      materiais = SEED_MATERIAIS.map(m => ({
-        id: genId(), nome:m.nome, unidade:m.unidade, categoria:m.categoria, min:m.min||5, obs:m.obs||''
+    materiais = mats || [];
+    movimentacoes = movs || [];
+    maquinarios = maqs || [];
+    maqMovs = maqMs || [];
+    atendimentos = ats || [];
+
+    // Primeiro acesso: sem materiais, cria o catálogo inicial no banco.
+    if (materiais.length === 0 && movimentacoes.length === 0) {
+      materiais = SEED_MATERIAIS.map((m, i) => ({
+        id: 'seed-mat-' + String(i + 1).padStart(4,'0'),
+        nome:m.nome, unidade:m.unidade, categoria:m.categoria, min:m.min||5, obs:m.obs||''
       }));
       movimentacoes = SEED_MATERIAIS.map((m,i) => ({
-        id: genId(), tipo:'entrada', materialId:materiais[i].id,
-        quantidade:m.qtdInicial, data:todayISO(), origem:'Estoque inicial (levantamento)', nf:'', obs:m.obs||''
+        id: 'seed-mov-' + String(i + 1).padStart(4,'0'),
+        tipo:'entrada',
+        materialId:materiais[i].id,
+        quantidade:m.qtdInicial,
+        data:todayISO(),
+        origem:'Estoque inicial (levantamento)',
+        nf:'',
+        obs:m.obs||''
       }));
-      maquinarios = []; maqMovs = []; atendimentos = [];
+      maquinarios = [];
+      maqMovs = [];
+      atendimentos = [];
       await salvarEmLote(materiais, 'material');
       await salvarEmLote(movimentacoes, 'mov');
     }
+
+    normalizarAtendimentos();
+    ultimaSincronizacao = new Date();
+    ctosmBackendStatus(CTOSM_ONLINE_ENABLED ? '🟢 Online · sincronizado' : '🟡 Local');
+    if (!silent) {
+      updateHeaderMeta();
+      render();
+    }
+  } finally {
+    CTOSM_LOAD_LOCK = false;
   }
-  ultimaSincronizacao = new Date();
 }
 
 async function aplicarContagemFisica() {
   const existentes = new Set(materiais.map(m => m.nome.trim().toLowerCase()));
   const novosMateriais = [], novosMovs = [];
-  CONTAGEM_FISICA_04_09_2026.forEach(item => {
+  CONTAGEM_FISICA_04_09_2026.forEach((item, i) => {
     if (existentes.has(item.nome.trim().toLowerCase())) return;
-    const id = genId();
+    const id = 'contagem-0409-mat-' + String(i + 1).padStart(4,'0');
     const mat = {id, nome:item.nome, unidade:item.unidade, categoria:item.categoria, min:item.min, obs:item.obs||''};
-    const mov = { id: genId(), tipo:'entrada', materialId:id, quantidade:item.qtd, data: todayISO(), origem: 'Contagem física de estoque (04/09/2026)', nf:'', obs: item.obs||'' };
+    const mov = {
+      id: 'contagem-0409-mov-' + String(i + 1).padStart(4,'0'),
+      tipo:'entrada', materialId:id, quantidade:item.qtd, data:todayISO(),
+      origem:'Contagem física de estoque (04/09/2026)', nf:'', obs:item.obs||''
+    };
     materiais.push(mat); movimentacoes.push(mov);
     novosMateriais.push(mat); novosMovs.push(mov);
   });
@@ -674,23 +780,12 @@ async function aplicarContagemFisica() {
     await salvarEmLote(novosMovs, 'mov');
   }
 }
+
 async function recarregarTudo() {
   await loadData();
   updateHeaderMeta();
   render();
   showToast('Dados atualizados.');
-}
-/* Evita que a atualização automática (ao voltar pra aba, ex: depois de tirar
-   uma foto) apague um atendimento que a pessoa está preenchendo. Só libera
-   o recarregamento automático quando não há rascunho em andamento. */
-function haRascunhoAtendimentoEmAndamento() {
-  if (activeTab !== 'atendimento') return false;
-  if (atItens.length || atFotosColeta.length || atFotosInstalacao.length) return true;
-  const campos = ['at-local','at-preposto','at-observacao','at-responsavel-nome'];
-  return campos.some(id => {
-    const el = document.getElementById(id);
-    return el && el.value.trim() !== '';
-  });
 }
 
 /* ============ Identidade do usuário atual ============
@@ -701,15 +796,11 @@ function haRascunhoAtendimentoEmAndamento() {
    localmente (pessoal, não compartilhado) neste navegador. */
 const IDENTIDADE_KEY = 'usuario-atual';
 async function carregarIdentidade() {
-  try {
-    const r = await window.storage.get(IDENTIDADE_KEY, false);
-    if (r && r.value) { usuarioAtual = JSON.parse(r.value).nome; return; }
-  } catch (e) {}
-  usuarioAtual = null;
+  try { usuarioAtual = localStorage.getItem('ctosm-usuario-atual') || null; } catch (e) { usuarioAtual = null; }
 }
 async function salvarIdentidade(nome) {
   usuarioAtual = nome;
-  try { await window.storage.set(IDENTIDADE_KEY, JSON.stringify({nome}), false); } catch (e) {}
+  try { localStorage.setItem('ctosm-usuario-atual', nome); } catch (e) {}
   atualizarBadgeIdentidade();
 }
 function atualizarBadgeIdentidade() {
@@ -1552,6 +1643,11 @@ async function salvarAtendimento() {
     registradoPor: usuarioAtual || '',
     criadoEm: new Date().toISOString()
   };
+  const registroAtendimentoOk = await salvarRegistro('atendimento', atendimento);
+  if (!registroAtendimentoOk) {
+    showToast('Não foi possível salvar o atendimento no banco online.', 8000);
+    return;
+  }
   atendimentos.push(atendimento);
   const movsNovos = atItens.map(it => ({
     id: genId(), tipo:'saida', materialId: it.materialId, quantidade: it.quantidade, data,
@@ -1560,9 +1656,16 @@ async function salvarAtendimento() {
     finalidade: 'Atendimento de campo' + (atendimento.observacao ? ' — ' + atendimento.observacao : ''),
     atendimentoId: id, registradoPor: usuarioAtual || ''
   }));
+  try {
+    await salvarEmLote(movsNovos, 'mov');
+  } catch (e) {
+    atendimentos = atendimentos.filter(a => a.id !== id);
+    try { await excluirRegistroStorage('atendimento', id); } catch (_) {}
+    showToast('Atendimento salvo de forma incompleta: não foi possível salvar os materiais no banco.', 9000);
+    console.error(e);
+    return;
+  }
   movimentacoes.push(...movsNovos);
-  await salvarRegistro('atendimento', atendimento);
-  await salvarEmLote(movsNovos, 'mov');
   let fotosSalvas = true, assinaturaSalva = true;
   if (atFotosColeta.length || atFotosInstalacao.length) {
     fotosSalvas = await salvarFotosComVerificacao(id, atFotosColeta, atFotosInstalacao);
@@ -1606,81 +1709,141 @@ function drawAtList() {
   host.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => verAtendimento(b.dataset.ver));
   host.querySelectorAll('[data-del]').forEach(b => b.onclick = () => excluirAtendimento(b.dataset.del));
 }
-/* ===== Mídia robusta: IndexedDB local + window.storage como fallback ===== */
-const MEDIA_DB_NAME = 'ctosm-media-v2';
-const MEDIA_STORE = 'arquivos';
-function mediaDB(){
-  return new Promise((resolve,reject)=>{
-    const r=indexedDB.open(MEDIA_DB_NAME,1);
-    r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(MEDIA_STORE)) r.result.createObjectStore(MEDIA_STORE); };
-    r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error);
+
+/* ===== Mídia online: Supabase Storage + tabela ctosm_media ===== */
+function dataUrlToBlob(dataUrl) {
+  const parts = String(dataUrl).split(',');
+  if (parts.length < 2) throw new Error('Imagem inválida.');
+  const mime = (parts[0].match(/data:([^;]+);/) || [,'application/octet-stream'])[1];
+  const binary = atob(parts[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], {type:mime});
+}
+
+async function ctosmUploadDataUrl(path, dataUrl) {
+  ctosmAssertOnline();
+  const blob = dataUrlToBlob(dataUrl);
+  const {error} = await CTOSM_DB.storage.from(CTOSM_BUCKET).upload(path, blob, {
+    upsert: true,
+    contentType: blob.type || 'image/jpeg',
+    cacheControl: '31536000'
   });
+  if (error) throw error;
+  return path;
 }
-async function mediaSet(key,value){
-  const db=await mediaDB();
-  return new Promise((resolve,reject)=>{ const tx=db.transaction(MEDIA_STORE,'readwrite'); tx.objectStore(MEDIA_STORE).put(value,key); tx.oncomplete=()=>{db.close();resolve(true)}; tx.onerror=()=>{db.close();reject(tx.error)}; });
+
+async function ctosmSignedUrl(path, expiresIn=3600) {
+  ctosmAssertOnline();
+  const {data, error} = await CTOSM_DB.storage.from(CTOSM_BUCKET).createSignedUrl(path, expiresIn);
+  if (error) throw error;
+  return data?.signedUrl || '';
 }
-async function mediaGet(key){
-  try{
-    const db=await mediaDB();
-    return await new Promise((resolve,reject)=>{ const tx=db.transaction(MEDIA_STORE,'readonly'); const q=tx.objectStore(MEDIA_STORE).get(key); q.onsuccess=()=>{db.close();resolve(q.result||'')}; q.onerror=()=>{db.close();reject(q.error)}; });
-  }catch(e){ return ''; }
+
+async function salvarMidiaServidor(id, tipo, dataUrl, ordem) {
+  const ext = dataUrl.startsWith('data:image/png') ? 'png' : 'jpg';
+  const path = `atendimentos/${id}/${tipo}-${String(ordem+1).padStart(2,'0')}.${ext}`;
+  await ctosmUploadDataUrl(path, dataUrl);
+
+  const mediaId = `${id}:${tipo}:${ordem}`;
+  const {error} = await CTOSM_DB.from('ctosm_media').upsert({
+    id: mediaId,
+    atendimento_id: id,
+    tipo,
+    arquivo_path: path,
+    ordem
+  }, {onConflict:'id'});
+  if (error) throw error;
+  return path;
 }
-async function mediaDelete(key){ try { const db=await mediaDB(); await new Promise((resolve,reject)=>{const tx=db.transaction(MEDIA_STORE,'readwrite');tx.objectStore(MEDIA_STORE).delete(key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close();}catch(e){} }
-async function salvarMidiaRobusta(key,value){
-  try { await mediaSet(key,value); const conf=await mediaGet(key); if(conf===value) return true; } catch(e) {}
-  return salvarComVerificacao(key,value, v=>typeof v==='string' && v.length>50);
-}
+
 async function carregarFotosAtendimento(id) {
-  const resultado={coleta:[],instalacao:[]};
-  // Novo formato: uma chave IndexedDB por foto.
-  for (const destino of ['coleta','instalacao']) {
-    let i=0;
-    while(i<100){
-      const v=await mediaGet('atendimento-foto:'+id+':'+destino+':'+i);
-      if(!v) break;
-      resultado[destino].push(v); i++;
-    }
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    const resultado={coleta:[],instalacao:[]};
+    try {
+      const dados = JSON.parse(localStorage.getItem('ctosm-media:' + id) || '{}');
+      return {coleta:dados.coleta||[], instalacao:dados.instalacao||[]};
+    } catch (e) { return resultado; }
   }
-  if(resultado.coleta.length || resultado.instalacao.length) return resultado;
-  // Compatibilidade com o formato anterior em window.storage.
-  const antigo=await storageGetComRetry('atendimento-fotos:'+id,true);
-  if(antigo && antigo.value){ try { const x=JSON.parse(antigo.value); if(Array.isArray(x.coleta)||Array.isArray(x.instalacao)) return {coleta:x.coleta||[],instalacao:x.instalacao||[]}; }catch(e){} }
-  // Compatibilidade com formato individual em window.storage.
-  const res=await storageListComRetry('atendimento-foto:'+id+':',true,4);
-  for(const chave of ((res&&Array.isArray(res.keys))?res.keys:[]).sort()){
-    const r=await storageGetComRetry(chave,true,3); if(!r||!r.value) continue;
-    const partes=chave.split(':'); const destino=partes[2]; if(destino==='coleta'||destino==='instalacao') resultado[destino].push(r.value);
+
+  const {data, error} = await CTOSM_DB
+    .from('ctosm_media')
+    .select('tipo,arquivo_path,ordem')
+    .eq('atendimento_id', id)
+    .in('tipo',['coleta','instalacao','antes','durante','depois'])
+    .order('ordem',{ascending:true});
+
+  if (error) throw error;
+
+  const resultado={coleta:[],instalacao:[]};
+  for (const item of (data||[])) {
+    const url = await ctosmSignedUrl(item.arquivo_path);
+    if (!url) continue;
+    if (item.tipo === 'coleta') resultado.coleta.push(url);
+    else resultado.instalacao.push(url);
   }
   return resultado;
 }
-async function salvarComVerificacao(chave,payload,validarConteudo){
-  for(let tentativa=0;tentativa<4;tentativa++){
-    try{ const resultado=await window.storage.set(chave,payload,true); if(resultado){ const conferencia=await storageGetComRetry(chave,true,3); if(conferencia&&conferencia.value&&(!validarConteudo||validarConteudo(conferencia.value))) return true; } }catch(e){}
-    if(tentativa<3) await new Promise(res=>setTimeout(res,400*(tentativa+1)));
-  }
-  return false;
-}
+
 async function salvarFotosComVerificacao(id,coleta,instalacao){
-  let tudoOk=true;
-  for(const [destino,fotos] of [['coleta',coleta],['instalacao',instalacao]]){
-    for(let i=0;i<fotos.length;i++){
-      const key='atendimento-foto:'+id+':'+destino+':'+i;
-      const ok=await salvarMidiaRobusta(key,fotos[i]);
-      if(!ok) tudoOk=false;
-    }
+  if (!coleta.length && !instalacao.length) return true;
+
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    try {
+      localStorage.setItem('ctosm-media:' + id, JSON.stringify({coleta,instalacao}));
+      return true;
+    } catch (e) { return false; }
   }
-  // Manifesto leve em IndexedDB para facilitar diagnóstico.
-  try{ await mediaSet('atendimento-fotos-manifesto:'+id,JSON.stringify({coleta:coleta.length,instalacao:instalacao.length})); }catch(e){}
-  return tudoOk;
+
+  try {
+    for (let i=0;i<coleta.length;i++) await salvarMidiaServidor(id,'coleta',coleta[i],i);
+    for (let i=0;i<instalacao.length;i++) await salvarMidiaServidor(id,'instalacao',instalacao[i],i);
+    return true;
+  } catch (e) {
+    console.error('CTOSM salvar fotos:', e);
+    return false;
+  }
 }
+
 async function carregarAssinaturaAtendimento(id){
-  const local=await mediaGet('atendimento-assinatura:'+id); if(local) return local;
-  const res=await storageGetComRetry('atendimento-assinatura:'+id,true); return (res&&res.value)?res.value:'';
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    try {
+      return localStorage.getItem('ctosm-assinatura:' + id) || '';
+    } catch (e) { return ''; }
+  }
+
+  const {data,error} = await CTOSM_DB
+    .from('ctosm_media')
+    .select('arquivo_path')
+    .eq('atendimento_id',id)
+    .eq('tipo','assinatura')
+    .maybeSingle();
+
+  if (error || !data?.arquivo_path) return '';
+  try { return await ctosmSignedUrl(data.arquivo_path); } catch(e) { return ''; }
 }
+
 async function salvarAssinaturaComVerificacao(id,dataUrl){
-  try{ await mediaSet('atendimento-assinatura:'+id,dataUrl); const c=await mediaGet('atendimento-assinatura:'+id); if(c===dataUrl) return true; }catch(e){}
-  return salvarComVerificacao('atendimento-assinatura:'+id,dataUrl,v=>typeof v==='string'&&v.length>50&&v.startsWith('data:image'));
+  if (!dataUrl) return true;
+  if (!CTOSM_ONLINE_ENABLED || !CTOSM_DB) {
+    try { localStorage.setItem('ctosm-assinatura:' + id, dataUrl); return true; } catch(e) { return false; }
+  }
+  try {
+    const path = `atendimentos/${id}/assinatura.png`;
+    await ctosmUploadDataUrl(path, dataUrl);
+    const {error} = await CTOSM_DB.from('ctosm_media').upsert({
+      id: `${id}:assinatura:0`,
+      atendimento_id:id,
+      tipo:'assinatura',
+      arquivo_path:path,
+      ordem:0
+    }, {onConflict:'id'});
+    if (error) throw error;
+    return true;
+  } catch(e) {
+    console.error('CTOSM assinatura:', e);
+    return false;
+  }
 }
 
 async function verAtendimento(id) {
@@ -2037,5 +2200,25 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 if(b)b.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;b.style.display='none';};
 window.addEventListener('appinstalled',()=>{if(b)b.style.display='none';});})();
 </script>
+
+<script>
+window.addEventListener('load', async () => {
+  try {
+    if (typeof carregarIdentidade === 'function') await carregarIdentidade();
+    if (typeof loadData === 'function') await loadData(false);
+    if (typeof aplicarContagemFisica === 'function' && materiais.length > 0) {
+      // A contagem física idempotente usa IDs estáveis e só adiciona o que ainda não existe.
+      try { await aplicarContagemFisica(); } catch (e) { console.warn('Contagem física:', e); }
+    }
+    if (typeof render === 'function') render();
+    ctosmSetupRealtime();
+  } catch (e) {
+    console.error('CTOSM inicialização:', e);
+    ctosmBackendStatus('🔴 Erro no banco online');
+    if (typeof showToast === 'function') showToast('Não foi possível carregar o banco online. Verifique o Supabase.', 10000);
+  }
+});
+</script>
+
 </body>
 </html>
