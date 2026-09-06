@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ctosm-v3';
+const CACHE_NAME = 'ctosm-v4';
 
 const APP_SHELL = [
   './',
@@ -11,8 +11,7 @@ const APP_SHELL = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
+    caches.open(CACHE_NAME)
       .then(cache => cache.addAll(APP_SHELL))
       .then(() => self.skipWaiting())
   );
@@ -20,8 +19,7 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches
-      .keys()
+    caches.keys()
       .then(keys =>
         Promise.all(
           keys
@@ -34,16 +32,33 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+
+  // NUNCA interceptar requisições do Supabase.
+  if (
+    url.hostname.endsWith('.supabase.co') ||
+    url.hostname.includes('supabase')
+  ) {
+    return;
+  }
+
+  // Só tratar requisições do próprio site.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (event.request.method !== 'GET') {
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)
       .then(response => {
+
         if (response && response.status === 200) {
           const copy = response.clone();
 
-          caches
-            .open(CACHE_NAME)
+          caches.open(CACHE_NAME)
             .then(cache => cache.put(event.request, copy))
             .catch(() => {});
         }
@@ -51,9 +66,8 @@ self.addEventListener('fetch', event => {
         return response;
       })
       .catch(() =>
-        caches.match(event.request).then(
-          cached => cached || caches.match('./index.html')
-        )
+        caches.match(event.request)
+          .then(cached => cached || caches.match('./index.html'))
       )
   );
 });
