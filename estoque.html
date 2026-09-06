@@ -1,0 +1,1647 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Estoque — CTOSM/SMS Cuiabá</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F3F0;
+  --surface:#FFFFFF;
+  --ink:#1B2430;
+  --ink-soft:#5B6472;
+  --ink-faint:#8B93A0;
+  --line:#DBDFDD;
+  --line-soft:#E9EBE8;
+  --navy:#1F3A5C;
+  --navy-deep:#132A44;
+  --ochre:#B5761E;
+  --ochre-soft:#F4E6CE;
+  --st-ok-fg:#2B7A4B; --st-ok-bg:#E1F2E7;
+  --st-baixo-fg:#96590A; --st-baixo-bg:#FBEEDA;
+  --st-zero-fg:#A6392F; --st-zero-bg:#F9E4E1;
+  --cat-eletrica:#96590A; --cat-eletrica-bg:#FBEEDA;
+  --cat-hidraulica:#2A5C8A; --cat-hidraulica-bg:#E3EEF7;
+  --cat-construcao:#5B6472; --cat-construcao-bg:#E7E9E6;
+  --cat-tintas:#7C4C9C; --cat-tintas-bg:#EFE6F5;
+  --cat-outros:#707070; --cat-outros-bg:#EBEBEA;
+  --in:#2B7A4B; --out:#96590A;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'IBM Plex Sans', sans-serif;
+  font-size:14px;
+  line-height:1.5;
+}
+h1,h2,h3,h4{
+  font-family:'Space Grotesk', sans-serif;
+  margin:0;
+  color:var(--ink);
+  font-weight:600;
+}
+.mono{font-family:'IBM Plex Mono', monospace;}
+a{color:inherit;}
+button{font-family:inherit;cursor:pointer;}
+
+/* ---- Header ---- */
+.app-header{
+  background:var(--navy);
+  color:#fff;
+  padding:22px clamp(16px,4vw,40px) 0;
+}
+.app-header .title-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:16px;
+  flex-wrap:wrap;
+  padding-bottom:18px;
+  border-bottom:1px solid rgba(255,255,255,0.14);
+}
+.app-header h1{color:#fff;font-size:22px;letter-spacing:0.2px;}
+.app-header .subtitle{color:rgba(255,255,255,0.68);font-size:12.5px;margin-top:4px;}
+.app-header .meta{color:rgba(255,255,255,0.55);font-size:12px;text-align:right;}
+.tabs{display:flex;gap:4px;padding-top:10px;flex-wrap:wrap;}
+.tab-btn{
+  background:none;border:none;color:rgba(255,255,255,0.62);
+  padding:10px 16px;font-size:13.5px;font-weight:500;
+  border-bottom:2px solid transparent;
+  transition:color .15s ease, border-color .15s ease;
+}
+.tab-btn:hover{color:#fff;}
+.tab-btn.active{color:#fff;border-bottom-color:var(--ochre);}
+
+/* ---- Layout ---- */
+.wrap{max-width:1180px;margin:0 auto;padding:24px clamp(16px,4vw,40px) 60px;}
+.section-title{
+  font-size:11.5px;text-transform:uppercase;letter-spacing:0.06em;
+  color:var(--ink-soft);margin-bottom:10px;font-weight:600;
+}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;}
+
+/* ---- KPIs ---- */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+.kpi{padding:16px 18px;}
+.kpi .num{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;line-height:1.1;}
+.kpi .label{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+.kpi.total .num{color:var(--navy);}
+.kpi.warn .num{color:var(--st-baixo-fg);}
+.kpi.ok .num{color:var(--st-ok-fg);}
+
+/* ---- Bars ---- */
+.bars-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+.bars-card{padding:16px 18px;}
+.bar-row{display:grid;grid-template-columns:150px 1fr 34px;align-items:center;gap:8px;margin-bottom:7px;font-size:12.5px;}
+.bar-row .bar-label{color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bar-track{background:var(--line-soft);border-radius:3px;height:9px;overflow:hidden;}
+.bar-fill{height:100%;background:var(--navy);border-radius:3px;}
+.bar-row .bar-count{text-align:right;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;font-size:11.5px;}
+
+/* ---- Filters ---- */
+.filters{padding:16px 18px;margin-bottom:20px;}
+.filters-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;}
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:11.5px;color:var(--ink-soft);font-weight:500;}
+select, input[type=text], input[type=number], input[type=date], textarea{
+  font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:8px 10px;
+  border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink);width:100%;
+}
+select:focus, input:focus, textarea:focus{outline:2px solid var(--navy);outline-offset:1px;border-color:var(--navy);}
+textarea{resize:vertical;min-height:56px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form-grid .full{grid-column:1/-1;}
+.form-actions{display:flex;gap:10px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft);}
+
+/* ---- Buttons ---- */
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:4px;font-size:13px;font-weight:500;}
+.btn:hover{border-color:var(--navy);}
+.btn-primary{background:var(--navy);border-color:var(--navy);color:#fff;}
+.btn-primary:hover{background:var(--navy-deep);}
+.btn-ochre{background:var(--ochre);border-color:var(--ochre);color:#fff;}
+.btn-in{background:var(--in);border-color:var(--in);color:#fff;}
+.btn-out{background:var(--out);border-color:var(--out);color:#fff;}
+.btn-ghost{background:none;border:none;color:var(--navy);padding:6px 8px;font-weight:500;font-size:12.5px;}
+.btn-danger{background:none;border:1px solid var(--st-zero-fg);color:var(--st-zero-fg);}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.header-btn{
+  background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35);color:#fff;
+  padding:6px 12px;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;
+}
+.header-btn:hover{background:rgba(255,255,255,0.22);}
+#identidade-badge{color:rgba(255,255,255,0.85);}
+#identidade-badge a{color:var(--ochre);text-decoration:none;font-weight:500;}
+#identidade-badge a:hover{text-decoration:underline;}
+
+/* ---- Item cards (Estoque) ---- */
+.item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+.item-card{padding:14px 16px;display:flex;flex-direction:column;gap:8px;}
+.item-card .name{font-weight:600;font-size:13.5px;line-height:1.3;}
+.item-card .unit{font-size:11.5px;color:var(--ink-soft);}
+.item-card .qty-row{display:flex;align-items:baseline;gap:6px;margin-top:2px;}
+.item-card .qty{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;}
+.item-card .qty-unit{font-size:11px;color:var(--ink-soft);}
+.item-card .btn-row{display:flex;gap:6px;margin-top:6px;}
+.item-card .btn-row button{flex:1;padding:7px 0;font-size:16px;font-weight:700;border-radius:4px;}
+.item-card .edit-link{position:absolute;top:10px;right:10px;font-size:11px;color:var(--ink-faint);}
+.item-card{position:relative;}
+
+/* ---- Table ---- */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12.8px;}
+thead th{
+  text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;
+  color:var(--ink-soft);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+tbody td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top;}
+tbody tr:hover{background:#FAFAF8;}
+.mono-cell{font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.tag-cat{display:inline-block;font-size:10.8px;padding:2px 8px;border-radius:10px;white-space:nowrap;font-weight:500;}
+.tag-eletrica{background:var(--cat-eletrica-bg);color:var(--cat-eletrica);}
+.tag-hidraulica{background:var(--cat-hidraulica-bg);color:var(--cat-hidraulica);}
+.tag-construcao{background:var(--cat-construcao-bg);color:var(--cat-construcao);}
+.tag-tintas{background:var(--cat-tintas-bg);color:var(--cat-tintas);}
+.tag-outros{background:var(--cat-outros-bg);color:var(--cat-outros);}
+.status-pill{display:inline-block;font-size:11px;font-weight:500;padding:3px 9px;border-radius:10px;white-space:nowrap;}
+.status-ok{color:var(--st-ok-fg);background:var(--st-ok-bg);}
+.status-baixo{color:var(--st-baixo-fg);background:var(--st-baixo-bg);}
+.status-zero{color:var(--st-zero-fg);background:var(--st-zero-bg);}
+.empty-state{padding:40px 20px;text-align:center;color:var(--ink-soft);}
+.empty-state h3{color:var(--ink-soft);font-size:15px;margin-bottom:6px;}
+
+/* ---- Signature ---- */
+.sig-wrap{border:1px dashed var(--line);border-radius:6px;background:#fbfcfd;padding:8px;}
+canvas.sig{width:100%;height:110px;background:#fff;border-radius:4px;touch-action:none;cursor:crosshair;display:block;}
+.sig-actions{display:flex;justify-content:space-between;align-items:center;margin-top:6px;}
+.sig-actions span{font-size:11px;color:var(--ink-faint);}
+.thumb-sig{height:32px;border:1px solid var(--line);border-radius:4px;cursor:pointer;background:#fff;}
+
+/* ---- Toast / Modal ---- */
+.toast{
+  position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:11px 18px;
+  border-radius:5px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,0.18);opacity:0;
+  transform:translateY(8px);transition:opacity .2s ease, transform .2s ease;pointer-events:none;z-index:200;
+}
+.toast.show{opacity:1;transform:translateY(0);}
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(19,42,68,0.42);display:none;align-items:flex-start;
+  justify-content:center;padding:40px 16px;z-index:150;overflow-y:auto;
+}
+.modal-overlay.show{display:flex;}
+.modal{background:#fff;border-radius:8px;max-width:520px;width:100%;padding:24px;}
+.modal h3{margin-bottom:4px;}
+.modal .modal-sub{font-size:12px;color:var(--ink-soft);margin-bottom:18px;}
+.modal-close{float:right;background:none;border:none;font-size:18px;color:var(--ink-soft);line-height:1;}
+.holder-badge{font-size:12px;color:var(--ink-soft);}
+.holder-badge b{color:var(--ink);}
+
+/* ---- Atendimento de campo ---- */
+.checks-row{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 0 4px;}
+.checks-row label{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;color:var(--ink);}
+.checks-row input[type=checkbox]{width:auto;}
+.add-item-row{display:grid;grid-template-columns:2.2fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;}
+.item-chip-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px;}
+.item-chip{display:flex;justify-content:space-between;align-items:center;background:var(--line-soft);border:1px solid var(--line);border-radius:6px;padding:7px 11px;font-size:13px;}
+.item-chip .warn-low{color:var(--st-zero-fg);font-size:11.5px;margin-left:6px;}
+.item-chip .remover{cursor:pointer;color:var(--st-zero-fg);font-size:12px;font-weight:600;}
+.foto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:8px;}
+.foto-thumb{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;aspect-ratio:1;background:#f2f2f2;}
+.foto-thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;}
+.foto-thumb .foto-del{position:absolute;top:3px;right:3px;background:rgba(20,20,20,0.65);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:1;cursor:pointer;}
+.foto-upload-btn{display:inline-block;border:1px dashed var(--line);border-radius:6px;padding:10px 14px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;text-align:center;}
+.foto-upload-btn:hover{border-color:var(--navy);color:var(--navy);}
+.at-card{padding:14px 16px;margin-bottom:10px;}
+.at-card .at-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+.at-card .at-local{font-weight:600;font-size:14px;}
+.at-card .at-meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.at-card .at-tags{margin-top:6px;}
+.at-card .at-actions{display:flex;gap:8px;flex-shrink:0;}
+.tag-servico{display:inline-block;font-size:10.8px;padding:2px 8px;border-radius:10px;white-space:nowrap;font-weight:500;background:var(--line-soft);color:var(--ink-soft);margin-right:4px;}
+#print-area-atendimento{display:none;}
+.pf-report h2{font-size:16px;margin:18px 0 8px;}
+.pf-report .pf-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12.5px;margin-bottom:10px;}
+.pf-report .pf-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.pf-report .pf-photos img{width:100%;border:1px solid var(--line);border-radius:4px;object-fit:cover;aspect-ratio:1;}
+@media print{
+  body.print-atendimento .app-header, body.print-atendimento .wrap{display:none !important;}
+  body.print-atendimento #print-area-atendimento{display:block !important;padding:0;}
+}
+
+@media (max-width:860px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr);}
+  .bars-grid{grid-template-columns:1fr;}
+  .form-grid{grid-template-columns:1fr;}
+  .item-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}
+}
+@media print{
+  .app-header, .filters, .tabs, .no-print{display:none !important;}
+  body{background:#fff;}
+  .wrap{padding:0;max-width:100%;}
+  .card{border:none;}
+  table{font-size:11px;}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+</head>
+<body>
+<header class="app-header">
+  <div class="title-row">
+    <div>
+      <h1>Controle de Estoque</h1>
+      <div class="subtitle">CTOSM · Gerência de Projetos · Secretaria Municipal de Saúde de Cuiabá · dados em tempo real (Supabase)</div>
+    </div>
+    <div class="meta" style="display:flex;align-items:center;gap:10px;">
+      <span id="identidade-badge" style="font-size:12.5px;"></span>
+      <span id="header-meta">carregando dados…</span>
+      <button class="header-btn" id="btn-atualizar" title="Buscar lançamentos de outros usuários">↻ Atualizar</button>
+    </div>
+  </div>
+  <nav class="tabs" id="main-tabs">
+    <button class="tab-btn active" data-tab="estoque">Estoque</button>
+    <button class="tab-btn" data-tab="cadastro">Cadastrar Material</button>
+    <button class="tab-btn" data-tab="movimentacoes">Movimentações</button>
+    <button class="tab-btn" data-tab="maquinario">Maquinário</button>
+    <button class="tab-btn" data-tab="atendimento">Atendimento de Campo</button>
+  </nav>
+</header>
+
+<main class="wrap" id="main-wrap">
+  <div id="tab-estoque"><div class="card empty-state"><h3>Carregando…</h3><p>Buscando os dados do estoque.</p></div></div>
+  <div id="tab-cadastro" style="display:none;"></div>
+  <div id="tab-movimentacoes" style="display:none;"></div>
+  <div id="tab-maquinario" style="display:none;"></div>
+  <div id="tab-atendimento" style="display:none;"></div>
+</main>
+
+<div class="modal-overlay no-print" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+<div class="toast no-print" id="toast"></div>
+<div id="print-area-atendimento"></div>
+<datalist id="lista-unidades"></datalist>
+
+<script>
+'use strict';
+
+/* ============ Domínio ============ */
+const CATEGORIAS = {
+  eletrica: 'Elétrica',
+  hidraulica: 'Hidráulica',
+  construcao: 'Material de Construção',
+  tintas: 'Tintas e Acabamentos',
+  outros: 'Outros',
+};
+
+/* ============ Estado ============ */
+let materiais = [];
+let movimentacoes = [];
+let maquinarios = [];
+let maqMovs = [];
+let atendimentos = [];
+let activeTab = 'estoque';
+let estFiltroCat = '';
+let estBusca = '';
+let movFiltro = {tipo:'', categoria:'', de:'', ate:''};
+let ultimaSincronizacao = null;
+let usuarioAtual = null;
+
+const PRESTADORES_PADRAO = ['Clemildes','Ronald Cleyton','Ednaldo','Denivaldo','Jesusmar Cesar','José Maria'];
+
+/* Naturezas de serviço do atendimento de campo — mesmas categorias usadas
+   nos 644 SGDs do sistema de tickets (não só elétrica/hidráulica). */
+const SERVICOS_ATENDIMENTO = {
+  eletrica: 'Elétrica',
+  hidraulica: 'Hidráulica',
+  pedreiro_civil: 'Pedreiro / Civil',
+  serralheria: 'Serralheria',
+  pintura: 'Pintura',
+  limpeza: 'Limpeza',
+  ar_condicionado: 'Ar-condicionado',
+  outros: 'Outros',
+};
+
+/* Lista de referência das unidades de saúde de Cuiabá, usada para sugerir
+   (autocomplete) o campo "Local do serviço" — a pessoa pode digitar
+   qualquer coisa, mas as sugestões já vinculam com o que existe no
+   sistema, evitando grafias diferentes para a mesma unidade. */
+const UNIDADES_SAUDE_CUIABA = [
+  'CAPS Adolescer', 'CAPS II CPA IV', 'CAPS II Verdão',
+  'CEM Bandeirantes', 'CEM Centro', 'CEM Coxipó Silva Freire',
+  'Central de Regulação', 'Centro Médico Infantil', 'CEO Dom Aquino',
+  'CEO Jardim Vitória', 'CEO Leblon', 'CEO Osmar Cabral',
+  'CEO Pascoal Ramos', 'CEO Tijucal', 'CEO Verdão',
+  'CER Pascoal Ramos', 'CER Planalto', 'CIEVS',
+  'CISC', 'Clínica da Família CPA I', 'Clínica Odontológica CPA III',
+  'Clínica Odontológica Jardim Leblon', 'Clínica Odontológica Leblon', 'Coordenadoria de Vigilância Ambiental',
+  'Coordenadoria de Vigilância Epidemiológica', 'Coordenadoria Técnica de Obras (CTO)', 'Coordenadoria Técnica de Vigilância Epidemiológica',
+  'COVISA (Vigilância Sanitária)', 'Diretoria de Regulação, Avaliação e Controle', 'Diretoria de Saúde Mental',
+  'Diretoria de Vigilância em Saúde', 'Diretoria de Vigilância em Saúde / CEREST', 'EMAD - Programa Melhor em Casa',
+  'Extensão Coivaras', 'Gabinete da Secretaria Adjunta de Atenção Hospitalar e Complexo Regulador', 'Gabinete da SMS',
+  'Gerência de Manutenção Predial/sms', 'HPSMC', 'HPSMC / CMI',
+  'LACEC', 'Policlínica Pedra 90', 'Pronto Socorro Municipal',
+  'Residência Terapêutica Curió', 'RT 01 - Beija-Flor', 'RT 01 - Beija-Flor / RT 05 - Arara',
+  'RT 02 - Curió', 'RT 03 - Andorinha', 'RT 05 - Arara',
+  'RT 05 - Arara / RT 07 - Sabiá', 'RT 06 - Sabiá', 'RT 07 - Sabiá',
+  'RT 09 - Tucano', 'RT 09 - Tucano / RT 01 - Beija-Flor', 'SAE Norte',
+  'Secretaria Adjunta de Assistência Farmacêutica – SAAF', 'Secretaria Adjunta de Atencao Primaria', 'Secretaria Adjunta de Saúde Bucal (SASB)',
+  'Secretaria Municipal de Saúde (SMS)', 'Secretaria Municipal de Saúde (SMS) - TI', 'UBS Alvorada',
+  'UBS Corolado', 'UBS Despraiado', 'UBS Novo Terceiro',
+  'UBS Quilombo', 'UBS Santa Isabel', 'UBS Sucuri',
+  'UPA Leblon', 'UPA Morada do Ouro', 'UPA Oeste',
+  'UPA Pascoal Ramos', 'UPA Verdão', 'URPICS',
+  'USF 1º de Março', 'USF 1º de Março/João Bosco Pinheiro', 'USF Águaçu',
+  'USF Altos da Serra', 'USF Altos da Serra I', 'USF Altos da Serra I e II',
+  'USF Altos da Serra II', 'USF Alvorada', 'USF Ana Poupina',
+  'USF Areão', 'USF Barreiro Branco', 'USF Baú',
+  'USF Bela Vista/Carumbé', 'USF Campo Velho', 'USF Cidade Alta',
+  'USF Cidade Verde / Pedra 90 III e IV', 'USF Cohab São Gonçalo', 'USF CPA III',
+  'USF CPA IV', 'USF Despraiado', 'USF Dom Aquino',
+  'USF Dr. Fábio', 'USF Eldorado', 'USF Grande Terceiro',
+  'USF Ilza Terezinha Picolli', 'USF Industriário', 'USF Jardim Araçá e Santa Amália',
+  'USF Jardim Araçá/Santa Amália', 'USF Jardim Colorado', 'USF Jardim Fortaleza',
+  'USF Jardim Imperial', 'USF Jardim Imperial II', 'USF Jardim Independência',
+  'USF Jardim Industriário I e II', 'USF Jardim Leblon', 'USF Jardim Vitória',
+  'USF Jardim Vitória I', 'USF Jardim Vitória II', 'USF Jardim Vitória II e III',
+  'USF Jardim Vitória III', 'USF Jd Passaredo', 'USF Jockey Club',
+  'USF Jockey Club I e II', 'USF Lixeira', 'USF Nico Baracat I',
+  'USF Nossa Senhora da Guia', 'USF Nova Esperança', 'USF Novo Colorado',
+  'USF Novo Colorado I', 'USF Novo Colorado I e II', 'USF Novo Colorado II',
+  'USF Novo Horizonte', 'USF Novo Mato Grosso', 'USF Novo Paraíso I',
+  'USF Novo Paraíso II', 'USF Novo Terceiro', 'USF Osmar Cabral/Jardim Liberdade',
+  'USF Ouro Fino', 'USF Ouro Fino/Serra Dourada', 'USF Paiaguás',
+  'USF Parque Atalaia I, II e III', 'USF Parque Cuiabá', 'USF Parque Ohara',
+  'USF Pedra 90', 'USF Pedra 90 I', 'USF Pedra 90 I e II',
+  'USF Pedra 90 I, II e III', 'USF Pedra 90 II', 'USF Pedra 90 IV, V e VI (Cinturão Verde)',
+  'USF Pedregal', 'USF Pedregal I e II', 'USF Pico do Amor',
+  'USF Planalto', 'USF Praeiro', 'USF Quilombo',
+  'USF Renascer', 'USF Residencial Coxipó I e II', 'USF Residencial Coxipó III',
+  'USF Ribeirão da Ponte', 'USF Ribeirão do Lipa', 'USF Rio dos Peixes',
+  'USF Rio dos Peixes / Extensão Coivaras / USF Águaçu e Extensão Barreiro Branco', 'USF Rio dos Peixes / Extensão Coivaras / USF da Guia / USF Águaçu e Extensão Barreiro Branco', 'USF Rio dos Peixes/Extensão Coivaras',
+  'USF Santa Amália', 'USF Santa Amália/Jardim Araçá', 'USF Santa Isabel',
+  'USF Santa Isabel I', 'USF Santa Isabel I, II e III', 'USF Santa Isabel II e III',
+  'USF Santa Laura', 'USF Santa Laura/Jardim Fortaleza', 'USF Santa Terezinha',
+  'USF São Gonçalo', 'USF Terra Nova', 'USF Terra Nova/Canjica',
+  'USF Tijucal', 'USF União/Florianópolis', 'USF/CEO Jardim Vitória I',
+  'USF/CEO Jardim Vitória II', 'Vigilância Sanitária', 'Zoonoses',
+];
+function listaUnidadesSugeridas() {
+  const conhecidas = new Set(UNIDADES_SAUDE_CUIABA.map(u => u.toLowerCase()));
+  const extras = [];
+  [...movimentacoes.map(m=>m.destino), ...atendimentos.map(a=>a.local)].forEach(nome => {
+    if (nome && !conhecidas.has(nome.toLowerCase()) && !extras.some(e=>e.toLowerCase()===nome.toLowerCase())) extras.push(nome);
+  });
+  return [...UNIDADES_SAUDE_CUIABA, ...extras].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+
+/* ============ Storage: Supabase (Postgres real, compartilhado de verdade) ============
+   Cada tabela do Supabase espelha um dos tipos de registro do app. Os
+   nomes dos campos no banco são snake_case; os mapeadores abaixo
+   convertem para o camelCase que o resto do app já usa, então quase
+   nada mais no código precisou mudar — só esta camada. */
+const sb = supabase.createClient(window.CTOSM_SUPABASE_CONFIG.url, window.CTOSM_SUPABASE_CONFIG.key);
+
+const TABELA = { material:'materiais', mov:'movimentacoes', maquinario:'maquinarios', maqmov:'maq_movs', atendimento:'atendimentos' };
+
+function paraLinha(prefixo, o) {
+  switch (prefixo) {
+    case 'material': return { id:o.id, nome:o.nome, unidade:o.unidade, categoria:o.categoria, min:o.min, obs:o.obs||'' };
+    case 'mov': return { id:o.id, tipo:o.tipo, material_id:o.materialId||null, quantidade:o.quantidade, data:o.data,
+      origem:o.origem||'', nf:o.nf||'', obs:o.obs||'', quem:o.quem||'', destino:o.destino||'', finalidade:o.finalidade||'',
+      atendimento_id:o.atendimentoId||null, registrado_por:o.registradoPor||'' };
+    case 'maquinario': return { id:o.id, nome:o.nome, qtd_total:o.qtdTotal };
+    case 'maqmov': return { id:o.id, maquinario_id:o.maquinarioId, de:o.de||'', quem_esta:o.quemEsta||'', data:o.data, status:o.status||'', obs:o.obs||'' };
+    case 'atendimento': return { id:o.id, local:o.local, data:o.data, preposto:o.preposto||'',
+      prestadores:o.prestadores||[], servicos:o.servicos||[], itens:o.itens||[], observacao:o.observacao||'',
+      responsavel_nome:o.responsavelNome||'', tem_assinatura:!!o.temAssinatura, tem_foto_coleta:!!o.temFotoColeta,
+      tem_foto_instalacao:!!o.temFotoInstalacao, registrado_por:o.registradoPor||'',
+      fotos_coleta:o.fotosColeta||[], fotos_instalacao:o.fotosInstalacao||[], assinatura_url:o.assinaturaUrl||'' };
+  }
+}
+function daLinha(prefixo, r) {
+  switch (prefixo) {
+    case 'material': return { id:r.id, nome:r.nome, unidade:r.unidade, categoria:r.categoria, min:r.min, obs:r.obs||'' };
+    case 'mov': return { id:r.id, tipo:r.tipo, materialId:r.material_id, quantidade:Number(r.quantidade), data:r.data,
+      origem:r.origem||'', nf:r.nf||'', obs:r.obs||'', quem:r.quem||'', destino:r.destino||'', finalidade:r.finalidade||'',
+      atendimentoId:r.atendimento_id||null, registradoPor:r.registrado_por||'' };
+    case 'maquinario': return { id:r.id, nome:r.nome, qtdTotal:r.qtd_total };
+    case 'maqmov': return { id:r.id, maquinarioId:r.maquinario_id, de:r.de||'', quemEsta:r.quem_esta||'', data:r.data, status:r.status||'', obs:r.obs||'' };
+    case 'atendimento': return { id:r.id, local:r.local, data:r.data, preposto:r.preposto||'',
+      prestadores:r.prestadores||[], servicos:r.servicos||[], itens:r.itens||[], observacao:r.observacao||'',
+      responsavelNome:r.responsavel_nome||'', temAssinatura:!!r.tem_assinatura, temFotoColeta:!!r.tem_foto_coleta,
+      temFotoInstalacao:!!r.tem_foto_instalacao, registradoPor:r.registrado_por||'', criadoEm:r.criado_em,
+      fotosColeta:r.fotos_coleta||[], fotosInstalacao:r.fotos_instalacao||[], assinaturaUrl:r.assinatura_url||'' };
+  }
+}
+async function carregarPrefixo(prefixo) {
+  try {
+    const { data, error } = await sb.from(TABELA[prefixo]).select('*');
+    if (error) { console.error(error); return []; }
+    return (data||[]).map(row => daLinha(prefixo, row));
+  } catch (e) { console.error(e); return []; }
+}
+async function salvarRegistro(prefixo, obj) {
+  try {
+    const { error } = await sb.from(TABELA[prefixo]).upsert(paraLinha(prefixo, obj));
+    if (error) { showToast('Não foi possível salvar. Tente novamente.'); return null; }
+    return obj;
+  } catch (e) {
+    showToast('Erro ao salvar: ' + (e && e.message ? e.message : ''), 7000);
+    return null;
+  }
+}
+async function excluirRegistroStorage(prefixo, id) {
+  try { await sb.from(TABELA[prefixo]).delete().eq('id', id); } catch (e) {}
+}
+async function salvarEmLote(itens, prefixo) {
+  // banco de verdade lida bem com várias linhas de uma vez — sem lotes/pausas.
+  if (!itens.length) return;
+  try {
+    const { error } = await sb.from(TABELA[prefixo]).upsert(itens.map(o => paraLinha(prefixo, o)));
+    if (error) showToast('Erro ao salvar em lote: ' + error.message, 7000);
+  } catch (e) { showToast('Erro ao salvar em lote: ' + (e && e.message ? e.message : ''), 7000); }
+}
+function mesclarPorId(atual, novo) {
+  const mapa = new Map(atual.map(x => [x.id, x]));
+  novo.forEach(x => mapa.set(x.id, x));
+  return Array.from(mapa.values());
+}
+
+async function loadData() {
+  const [mats, movs, maqs, maqMs, ats] = await Promise.all([
+    carregarPrefixo('material'), carregarPrefixo('mov'), carregarPrefixo('maquinario'),
+    carregarPrefixo('maqmov'), carregarPrefixo('atendimento')
+  ]);
+  materiais = mesclarPorId(materiais, mats);
+  movimentacoes = mesclarPorId(movimentacoes, movs);
+  maquinarios = mesclarPorId(maquinarios, maqs);
+  maqMovs = mesclarPorId(maqMovs, maqMs);
+  atendimentos = mesclarPorId(atendimentos, ats);
+  ultimaSincronizacao = new Date();
+}
+async function recarregarTudo() {
+  await loadData();
+  updateHeaderMeta();
+  render();
+  showToast('Dados atualizados.');
+}
+/* Tempo real: assim que alguém em outro aparelho salva/exclui algo, o
+   Supabase avisa todo mundo conectado — não precisa mais de botão
+   "Atualizar" nem de recarregar ao voltar pra aba. Ainda assim, evitamos
+   redesenhar o formulário do atendimento por cima de um rascunho em
+   andamento (ex: no meio de tirar uma foto). */
+function haRascunhoAtendimentoEmAndamento() {
+  if (activeTab !== 'atendimento') return false;
+  if (atItens.length || atFotosColeta.length || atFotosInstalacao.length) return true;
+  const campos = ['at-local','at-preposto','at-observacao','at-responsavel-nome'];
+  return campos.some(id => {
+    const el = document.getElementById(id);
+    return el && el.value.trim() !== '';
+  });
+}
+function ligarTempoReal() {
+  ['materiais','movimentacoes','maquinarios','maq_movs','atendimentos'].forEach(tabela => {
+    sb.channel('mudancas-' + tabela)
+      .on('postgres_changes', {event:'*', schema:'public', table:tabela}, () => {
+        if (!haRascunhoAtendimentoEmAndamento()) recarregarTudo();
+      })
+      .subscribe();
+  });
+}
+
+/* ============ Identidade do usuário atual ============
+   Não é login/senha (isso aqui não protege nada de verdade — qualquer um
+   com o link abre o arquivo). É só "quem está usando este aparelho agora",
+   pra parar de depender de digitação livre nos campos de responsável e
+   preencher esses campos sozinho, evitando erro de nome. Fica salvo
+   localmente (pessoal, não compartilhado) neste navegador. */
+const IDENTIDADE_KEY = 'ctosm-usuario-atual';
+async function carregarIdentidade() {
+  try {
+    const nome = localStorage.getItem(IDENTIDADE_KEY);
+    if (nome) { usuarioAtual = nome; return; }
+  } catch (e) {}
+  usuarioAtual = null;
+}
+async function salvarIdentidade(nome) {
+  usuarioAtual = nome;
+  try { localStorage.setItem(IDENTIDADE_KEY, nome); } catch (e) {}
+  atualizarBadgeIdentidade();
+}
+function atualizarBadgeIdentidade() {
+  const el = document.getElementById('identidade-badge');
+  if (!el) return;
+  el.innerHTML = usuarioAtual
+    ? `${escapeHtml(usuarioAtual)} <a href="javascript:void(0)" id="trocar-identidade">(trocar)</a>`
+    : `<a href="javascript:void(0)" id="trocar-identidade">quem é você?</a>`;
+  document.getElementById('trocar-identidade').onclick = () => abrirSeletorIdentidade();
+}
+function abrirSeletorIdentidade() {
+  openModal(`
+    <h3>Quem é você?</h3>
+    <div class="modal-sub">Isso só preenche os campos de responsável sozinho — não é senha nem trava de acesso.</div>
+    <div class="checks-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+      ${PRESTADORES_PADRAO.map(p => `<label style="font-size:14px;"><input type="radio" name="ident-nome" value="${p}"> ${p}</label>`).join('')}
+      <label style="font-size:14px;"><input type="radio" name="ident-nome" id="ident-outro-radio"> Outro:</label>
+      <input type="text" id="ident-outro-nome" placeholder="seu nome" style="max-width:240px;">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="ident-confirmar">Confirmar</button>
+      <button class="btn btn-ghost" id="ident-cancelar">Cancelar</button>
+    </div>
+  `);
+  document.getElementById('ident-cancelar').onclick = closeModal;
+  document.getElementById('ident-confirmar').onclick = async () => {
+    const marcado = document.querySelector('input[name="ident-nome"]:checked');
+    let nome = '';
+    if (marcado && marcado.id === 'ident-outro-radio') nome = document.getElementById('ident-outro-nome').value.trim();
+    else if (marcado) nome = marcado.value;
+    if (!nome) { showToast('Selecione ou digite um nome.'); return; }
+    await salvarIdentidade(nome);
+    closeModal();
+    showToast(`Agora você é ${nome}.`);
+  };
+}
+
+function showToast(msg, durationMs) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove('show'), durationMs || 2600);
+}
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function fmtDateBR(iso) { if (!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function genId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  // reserva pra navegadores muito antigos sem crypto.randomUUID
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8); return v.toString(16);
+  });
+}
+function escapeHtml(str) { if (!str) return ''; return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function estoqueAtual(materialId) {
+  return movimentacoes.reduce((acc,m) => {
+    if (m.materialId !== materialId) return acc;
+    return acc + (m.tipo === 'entrada' ? m.quantidade : -m.quantidade);
+  }, 0);
+}
+function statusEstoque(atual, min) {
+  if (atual <= 0) return 'zero';
+  if (atual < min) return 'baixo';
+  return 'ok';
+}
+function statusLabel(s) { return {ok:'OK', baixo:'Baixo', zero:'Zerado'}[s] || s; }
+function holderAtual(maqId) {
+  const hist = maqMovs.filter(m => m.maquinarioId === maqId).sort((a,b) => a.data < b.data ? 1 : -1);
+  return hist[0] || null;
+}
+function optionsHtml(map, selected, includeAll, allLabel) {
+  let html = '';
+  if (includeAll) html += `<option value="" ${selected===''?'selected':''}>${allLabel}</option>`;
+  Object.keys(map).forEach(k => { html += `<option value="${k}" ${selected===k?'selected':''}>${map[k]}</option>`; });
+  return html;
+}
+function optionsMateriais(selected, categoriaFiltro) {
+  const list = materiais.filter(m => !categoriaFiltro || m.categoria===categoriaFiltro);
+  return list.map(m => `<option value="${m.id}" ${m.id===selected?'selected':''}>${escapeHtml(m.nome)} (${escapeHtml(m.unidade)})</option>`).join('');
+}
+
+/* ============ Modal ============ */
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = `<button class="modal-close" id="modal-x">&times;</button>${html}`;
+  document.getElementById('modal-overlay').classList.add('show');
+  document.getElementById('modal-x').onclick = closeModal;
+}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('show'); document.getElementById('modal-content').innerHTML=''; }
+document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target.id==='modal-overlay') closeModal(); });
+
+/* ============ Tabs ============ */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
+  ['estoque','cadastro','movimentacoes','maquinario','atendimento'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = (t===tab) ? '' : 'none';
+  });
+  render();
+}
+function updateHeaderMeta() {
+  const totalUnid = materiais.reduce((a,m)=>a+estoqueAtual(m.id),0);
+  const hora = ultimaSincronizacao ? ultimaSincronizacao.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}) : '—';
+  document.getElementById('header-meta').textContent = `${materiais.length} materiais · ${totalUnid} unidades em estoque · sincronizado às ${hora}`;
+  document.getElementById('lista-unidades').innerHTML = listaUnidadesSugeridas().map(u => `<option value="${escapeHtml(u)}">`).join('');
+  atualizarBadgeIdentidade();
+}
+function render() {
+  updateHeaderMeta();
+  if (activeTab==='estoque') renderEstoque();
+  else if (activeTab==='cadastro') renderCadastro();
+  else if (activeTab==='movimentacoes') renderMovimentacoes();
+  else if (activeTab==='maquinario') renderMaquinario();
+  else if (activeTab==='atendimento') renderAtendimento();
+}
+
+/* ============ Aba: Estoque ============ */
+function renderEstoque() {
+  const el = document.getElementById('tab-estoque');
+  const total = materiais.length;
+  const totalUnid = materiais.reduce((a,m)=>a+estoqueAtual(m.id),0);
+  const baixos = materiais.filter(m => statusEstoque(estoqueAtual(m.id), m.min) !== 'ok');
+  const totalMaq = maquinarios.length;
+
+  const byCat = {};
+  Object.keys(CATEGORIAS).forEach(c => byCat[c]=0);
+  materiais.forEach(m => { byCat[m.categoria] = (byCat[m.categoria]||0) + estoqueAtual(m.id); });
+  const maxCat = Math.max(1, ...Object.values(byCat));
+  const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([k,v]) => `
+    <div class="bar-row">
+      <div class="bar-label">${CATEGORIAS[k]||k}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(v/maxCat)*100}%;background:var(--cat-${k},var(--navy));"></div></div>
+      <div class="bar-count">${v}</div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="kpi-grid">
+      <div class="card kpi total"><div class="num">${total}</div><div class="label">Materiais cadastrados</div></div>
+      <div class="card kpi ok"><div class="num">${totalUnid}</div><div class="label">Unidades em estoque</div></div>
+      <div class="card kpi warn"><div class="num">${baixos.length}</div><div class="label">Itens em estoque baixo/zerado</div></div>
+      <div class="card kpi total"><div class="num">${totalMaq}</div><div class="label">Equipamentos cadastrados</div></div>
+    </div>
+    <div class="section-title">Estoque por categoria</div>
+    <div class="card bars-card" style="margin-bottom:24px;">${catRows}</div>
+
+    <div class="section-title">Itens em estoque</div>
+    <div class="card filters">
+      <div class="filters-grid">
+        <div class="field"><label for="es-busca">Buscar material</label><input type="text" id="es-busca" placeholder="ex: lâmpada, cimento..." value="${escapeHtml(estBusca)}"></div>
+        <div class="field"><label for="es-cat">Categoria</label><select id="es-cat">${optionsHtml(CATEGORIAS, estFiltroCat, true, 'Todas categorias')}</select></div>
+      </div>
+    </div>
+    <div id="es-grid-host"></div>
+  `;
+  document.getElementById('es-busca').oninput = (e)=>{ estBusca=e.target.value; drawGrid(); };
+  document.getElementById('es-cat').onchange = (e)=>{ estFiltroCat=e.target.value; drawGrid(); };
+  drawGrid();
+
+  function drawGrid() {
+    const q = estBusca.toLowerCase();
+    const list = materiais.filter(m => (!estFiltroCat||m.categoria===estFiltroCat) && m.nome.toLowerCase().includes(q));
+    const host = document.getElementById('es-grid-host');
+    if (!list.length) {
+      host.innerHTML = `<div class="card empty-state"><h3>Nenhum material encontrado</h3><p>Ajuste os filtros ou cadastre um novo material.</p></div>`;
+      return;
+    }
+    host.innerHTML = `<div class="item-grid">${list.map(itemCardHtml).join('')}</div>`;
+    list.forEach(m => {
+      document.getElementById('add-'+m.id).onclick = () => openEntradaModal(m.id);
+      document.getElementById('sub-'+m.id).onclick = () => openSaidaModal(m.id);
+      document.getElementById('edit-'+m.id).onclick = () => openEditMaterialModal(m.id);
+    });
+  }
+}
+function itemCardHtml(m) {
+  const atual = estoqueAtual(m.id);
+  const st = statusEstoque(atual, m.min);
+  return `
+    <div class="card item-card">
+      <a class="edit-link" id="edit-${m.id}" href="javascript:void(0)">editar</a>
+      <div class="name">${escapeHtml(m.nome)}</div>
+      <div><span class="tag-cat tag-${m.categoria}">${CATEGORIAS[m.categoria]||m.categoria}</span></div>
+      <div class="unit">${escapeHtml(m.unidade)}</div>
+      <div class="qty-row"><span class="qty" style="color:var(--st-${st}-fg);">${atual}</span><span class="qty-unit">em estoque</span></div>
+      <div><span class="status-pill status-${st}">${statusLabel(st)}${st!=='ok' ? ' · mín. '+m.min : ''}</span></div>
+      <div class="btn-row">
+        <button class="btn-in" id="add-${m.id}" title="Adicionar entrada">+</button>
+        <button class="btn-out" id="sub-${m.id}" title="Registrar saída">−</button>
+      </div>
+    </div>`;
+}
+
+function openEntradaModal(materialId) {
+  const m = materiais.find(x=>x.id===materialId);
+  openModal(`
+    <h3>Adicionar ao estoque</h3>
+    <div class="modal-sub">${escapeHtml(m.nome)} · estoque atual: ${estoqueAtual(m.id)} ${escapeHtml(m.unidade)}</div>
+    <div class="form-grid">
+      <div class="field"><label>Quantidade</label><input type="number" id="me-qtd" min="1" value="1"></div>
+      <div class="field"><label>Data</label><input type="date" id="me-data" value="${todayISO()}"></div>
+      <div class="field full"><label>Fornecedor / origem</label><input type="text" id="me-origem" placeholder="Ex: almoxarifado central, compra, doação..."></div>
+      <div class="field"><label>Nota fiscal (opcional)</label><input type="text" id="me-nf"></div>
+      <div class="field full"><label>Observação</label><input type="text" id="me-obs"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-in" id="me-save">Registrar entrada</button>
+      <button class="btn btn-ghost" id="me-cancel">Cancelar</button>
+    </div>
+  `);
+  document.getElementById('me-cancel').onclick = closeModal;
+  document.getElementById('me-save').onclick = async () => {
+    const quantidade = Number(document.getElementById('me-qtd').value);
+    if (!quantidade || quantidade<=0) { showToast('Informe uma quantidade válida.'); return; }
+    const mov = {
+      id: genId(), tipo:'entrada', materialId,
+      quantidade, data: document.getElementById('me-data').value || todayISO(),
+      origem: document.getElementById('me-origem').value.trim(),
+      nf: document.getElementById('me-nf').value.trim(),
+      obs: document.getElementById('me-obs').value.trim(),
+      registradoPor: usuarioAtual || ''
+    };
+    movimentacoes.push(mov);
+    await salvarRegistro('mov', mov);
+    closeModal();
+    showToast('Entrada registrada.');
+    render();
+  };
+}
+
+let sigCanvas, sigCtx, sigHasDrawing=false, sigDrawing=false, sigLastPos=null;
+function openSaidaModal(materialId) {
+  const m = materiais.find(x=>x.id===materialId);
+  openModal(`
+    <h3>Registrar saída</h3>
+    <div class="modal-sub">${escapeHtml(m.nome)} · estoque atual: ${estoqueAtual(m.id)} ${escapeHtml(m.unidade)}</div>
+    <div class="form-grid">
+      <div class="field"><label>Quantidade</label><input type="number" id="ms-qtd" min="1" value="1"></div>
+      <div class="field"><label>Data</label><input type="date" id="ms-data" value="${todayISO()}"></div>
+      <div class="field"><label>Quem retirou</label><input type="text" id="ms-quem" value="${escapeHtml(usuarioAtual||'')}" placeholder="Nome do responsável"></div>
+      <div class="field"><label>Setor / destino</label><input type="text" id="ms-destino" list="lista-unidades" placeholder="Ex: UPA Pedra 90"></div>
+      <div class="field full"><label>Onde será usado / finalidade</label><textarea id="ms-final"></textarea></div>
+      <div class="field full">
+        <label>Assinatura de quem retirou</label>
+        <div class="sig-wrap">
+          <canvas class="sig" id="sig-pad"></canvas>
+          <div class="sig-actions"><span>Assine com o mouse ou o dedo</span><button class="btn btn-ghost btn-sm" id="sig-clear">Limpar</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-out" id="ms-save">Registrar saída</button>
+      <button class="btn btn-ghost" id="ms-cancel">Cancelar</button>
+    </div>
+  `);
+  initSignaturePad();
+  document.getElementById('ms-cancel').onclick = closeModal;
+  document.getElementById('ms-save').onclick = async () => {
+    const quantidade = Number(document.getElementById('ms-qtd').value);
+    const quem = document.getElementById('ms-quem').value.trim();
+    if (!quantidade || quantidade<=0) { showToast('Informe uma quantidade válida.'); return; }
+    if (!quem) { showToast('Informe quem está retirando o material.'); return; }
+    const atual = estoqueAtual(materialId);
+    if (quantidade > atual) {
+      if (!confirm(`A quantidade (${quantidade}) é maior que o estoque atual (${atual}). Registrar mesmo assim?`)) return;
+    }
+    movimentacoes.push({
+      id: genId(), tipo:'saida', materialId, quantidade,
+      data: document.getElementById('ms-data').value || todayISO(),
+      quem, destino: document.getElementById('ms-destino').value.trim(),
+      finalidade: document.getElementById('ms-final').value.trim(),
+      assinatura: sigHasDrawing ? sigCanvas.toDataURL('image/png') : '',
+      registradoPor: usuarioAtual || ''
+    });
+    const mov = movimentacoes[movimentacoes.length - 1];
+    await salvarRegistro('mov', mov);
+    closeModal();
+    showToast('Saída registrada.');
+    render();
+  };
+}
+function initSignaturePad() {
+  sigCanvas = document.getElementById('sig-pad');
+  const ratio = window.devicePixelRatio || 1;
+  const cssW = sigCanvas.clientWidth || 400;
+  sigCanvas.width = cssW*ratio; sigCanvas.height = 110*ratio;
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.scale(ratio,ratio);
+  sigCtx.lineWidth = 2; sigCtx.lineCap='round'; sigCtx.strokeStyle='#1B2430';
+  sigHasDrawing = false;
+  function pos(e) { const r=sigCanvas.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return {x:p.clientX-r.left, y:p.clientY-r.top}; }
+  function start(e) { sigDrawing=true; sigLastPos=pos(e); e.preventDefault(); }
+  function move(e) { if(!sigDrawing) return; const p=pos(e); sigCtx.beginPath(); sigCtx.moveTo(sigLastPos.x,sigLastPos.y); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); sigLastPos=p; sigHasDrawing=true; e.preventDefault(); }
+  function end() { sigDrawing=false; }
+  sigCanvas.addEventListener('mousedown',start);
+  sigCanvas.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+  sigCanvas.addEventListener('touchstart',start,{passive:false});
+  sigCanvas.addEventListener('touchmove',move,{passive:false});
+  sigCanvas.addEventListener('touchend',end);
+  document.getElementById('sig-clear').onclick = () => { sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); sigHasDrawing=false; };
+}
+
+function openEditMaterialModal(materialId) {
+  const m = materiais.find(x=>x.id===materialId);
+  openModal(`
+    <h3>Editar material</h3>
+    <div class="form-grid">
+      <div class="field full"><label>Nome</label><input type="text" id="ed-nome" value="${escapeHtml(m.nome)}"></div>
+      <div class="field"><label>Categoria</label><select id="ed-cat">${optionsHtml(CATEGORIAS, m.categoria, false)}</select></div>
+      <div class="field"><label>Unidade</label><input type="text" id="ed-un" value="${escapeHtml(m.unidade)}"></div>
+      <div class="field"><label>Estoque mínimo (alerta)</label><input type="number" id="ed-min" min="0" value="${m.min}"></div>
+      <div class="field full"><label>Observação</label><input type="text" id="ed-obs" value="${escapeHtml(m.obs||'')}"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="ed-save">Salvar</button>
+      <button class="btn btn-ghost" id="ed-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="ed-del" style="margin-left:auto;">Excluir material</button>
+    </div>
+  `);
+  document.getElementById('ed-cancel').onclick = closeModal;
+  document.getElementById('ed-save').onclick = async () => {
+    const nome = document.getElementById('ed-nome').value.trim();
+    if (!nome) { showToast('Informe o nome do material.'); return; }
+    m.nome = nome;
+    m.categoria = document.getElementById('ed-cat').value;
+    m.unidade = document.getElementById('ed-un').value.trim() || 'unidade';
+    m.min = Number(document.getElementById('ed-min').value) || 0;
+    m.obs = document.getElementById('ed-obs').value.trim();
+    await salvarRegistro('material', m);
+    closeModal();
+    showToast('Material atualizado.');
+    render();
+  };
+  document.getElementById('ed-del').onclick = async () => {
+    if (!confirm('Excluir este material? O histórico de movimentações associado será mantido.')) return;
+    materiais = materiais.filter(x=>x.id!==materialId);
+    await excluirRegistroStorage('material', materialId);
+    closeModal();
+    showToast('Material excluído.');
+    render();
+  };
+}
+
+/* ============ Aba: Cadastrar Material ============ */
+function renderCadastro() {
+  const el = document.getElementById('tab-cadastro');
+  el.innerHTML = `
+    <div class="section-title">Novo material</div>
+    <div class="card" style="padding:24px;max-width:680px;">
+      <div class="form-grid">
+        <div class="field full"><label>Nome do material</label><input type="text" id="cm-nome" placeholder="Ex: Tinta esmalte azul"></div>
+        <div class="field"><label>Categoria</label><select id="cm-cat">${optionsHtml(CATEGORIAS, 'construcao', false)}</select></div>
+        <div class="field"><label>Unidade</label><input type="text" id="cm-un" placeholder="Ex: lata 18L, saco 50kg, unidade"></div>
+        <div class="field"><label>Estoque mínimo (alerta)</label><input type="number" id="cm-min" min="0" value="5"></div>
+        <div class="field"><label>Quantidade inicial (opcional)</label><input type="number" id="cm-qtd" min="0" value="0"></div>
+        <div class="field full"><label>Observação (opcional)</label><input type="text" id="cm-obs"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="cm-save">Cadastrar material</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('cm-save').onclick = async () => {
+    const nome = document.getElementById('cm-nome').value.trim();
+    if (!nome) { showToast('Informe o nome do material.'); return; }
+    const novo = {
+      id: genId(), nome,
+      categoria: document.getElementById('cm-cat').value,
+      unidade: document.getElementById('cm-un').value.trim() || 'unidade',
+      min: Number(document.getElementById('cm-min').value) || 0,
+      obs: document.getElementById('cm-obs').value.trim()
+    };
+    materiais.push(novo);
+    const qtdInicial = Number(document.getElementById('cm-qtd').value) || 0;
+    await salvarRegistro('material', novo);
+    if (qtdInicial > 0) {
+      const mov = { id: genId(), tipo:'entrada', materialId:novo.id, quantidade:qtdInicial, data:todayISO(), origem:'Cadastro inicial', nf:'', obs:'' };
+      movimentacoes.push(mov);
+      await salvarRegistro('mov', mov);
+    }
+    showToast('Material cadastrado — já disponível na aba Estoque.');
+    switchTab('estoque');
+  };
+}
+
+/* ============ Aba: Movimentações ============ */
+function renderMovimentacoes() {
+  const el = document.getElementById('tab-movimentacoes');
+  el.innerHTML = `
+    <div class="section-title">Filtrar movimentações</div>
+    <div class="card filters">
+      <div class="filters-grid">
+        <div class="field"><label>Tipo</label><select id="mv-tipo"><option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select></div>
+        <div class="field"><label>Categoria</label><select id="mv-cat">${optionsHtml(CATEGORIAS, '', true, 'Todas categorias')}</select></div>
+        <div class="field"><label>De</label><input type="date" id="mv-de"></div>
+        <div class="field"><label>Até</label><input type="date" id="mv-ate"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary" id="mv-filtrar">Filtrar</button>
+        <button class="btn" id="mv-csv">Exportar CSV</button>
+        <button class="btn" id="mv-print">Imprimir</button>
+      </div>
+    </div>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Material</th><th>Categoria</th><th>Qtd</th><th>Responsável / Origem</th><th>Destino / Finalidade</th><th>Registrado por</th><th>Assinatura</th></tr></thead>
+        <tbody id="mv-tbody"></tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('mv-tipo').value = movFiltro.tipo;
+  document.getElementById('mv-cat').value = movFiltro.categoria;
+  document.getElementById('mv-de').value = movFiltro.de;
+  document.getElementById('mv-ate').value = movFiltro.ate;
+  document.getElementById('mv-filtrar').onclick = () => {
+    movFiltro = {
+      tipo: document.getElementById('mv-tipo').value,
+      categoria: document.getElementById('mv-cat').value,
+      de: document.getElementById('mv-de').value,
+      ate: document.getElementById('mv-ate').value
+    };
+    drawTable();
+  };
+  document.getElementById('mv-print').onclick = () => window.print();
+  document.getElementById('mv-csv').onclick = () => {
+    const list = getFiltered();
+    const rows = [['Data','Tipo','Material','Categoria','Quantidade','Responsavel_Origem','Destino_Finalidade']];
+    list.forEach(m => {
+      const mat = materiais.find(x=>x.id===m.materialId);
+      rows.push([
+        fmtDateBR(m.data), m.tipo, mat?mat.nome:'', mat?CATEGORIAS[mat.categoria]:'', m.quantidade,
+        m.tipo==='entrada' ? (m.origem||'') : (m.quem||''),
+        m.tipo==='entrada' ? ('NF '+(m.nf||'')) : [m.destino,m.finalidade].filter(Boolean).join(' - ')
+      ]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'movimentacoes_estoque_' + todayISO() + '.csv';
+    a.click();
+  };
+
+  function getFiltered() {
+    return movimentacoes.filter(m => {
+      const mat = materiais.find(x=>x.id===m.materialId);
+      if (movFiltro.tipo && m.tipo!==movFiltro.tipo) return false;
+      if (movFiltro.categoria && (!mat || mat.categoria!==movFiltro.categoria)) return false;
+      if (movFiltro.de && m.data < movFiltro.de) return false;
+      if (movFiltro.ate && m.data > movFiltro.ate) return false;
+      return true;
+    }).sort((a,b) => b.data < a.data ? -1 : 1);
+  }
+  function drawTable() {
+    const tb = document.getElementById('mv-tbody');
+    const list = getFiltered();
+    if (!list.length) { tb.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px;">Nenhum resultado para o filtro.</td></tr>`; return; }
+    tb.innerHTML = list.map(m => {
+      const mat = materiais.find(x=>x.id===m.materialId);
+      const sigCell = (m.tipo==='saida' && m.assinatura) ? `<img class="thumb-sig" src="${m.assinatura}" data-sig="${m.id}">` : '—';
+      return `<tr>
+        <td class="mono-cell">${fmtDateBR(m.data)}</td>
+        <td><span class="status-pill ${m.tipo==='entrada'?'status-ok':'status-baixo'}">${m.tipo==='entrada'?'Entrada':'Saída'}</span></td>
+        <td>${mat?escapeHtml(mat.nome):'(excluído)'}</td>
+        <td>${mat?`<span class="tag-cat tag-${mat.categoria}">${CATEGORIAS[mat.categoria]}</span>`:'—'}</td>
+        <td class="mono-cell">${m.quantidade}</td>
+        <td>${m.tipo==='entrada' ? escapeHtml(m.origem||'—') : escapeHtml(m.quem||'—')}</td>
+        <td style="color:var(--ink-soft);">${m.tipo==='entrada' ? ('NF '+escapeHtml(m.nf||'—')) : escapeHtml([m.destino,m.finalidade].filter(Boolean).join(' — ')||'—')}</td>
+        <td style="color:var(--ink-soft);">${escapeHtml(m.registradoPor||'—')}</td>
+        <td>${sigCell}</td>
+      </tr>`;
+    }).join('');
+    tb.querySelectorAll('[data-sig]').forEach(img => img.onclick = () => {
+      const m = movimentacoes.find(x=>x.id===img.dataset.sig);
+      const mat = materiais.find(x=>x.id===m.materialId);
+      openModal(`
+        <h3>Comprovante de saída</h3>
+        <div class="modal-sub">${mat?escapeHtml(mat.nome):''} · ${m.quantidade} un. · ${fmtDateBR(m.data)} · ${escapeHtml(m.quem||'')}</div>
+        <img src="${m.assinatura}" style="width:100%;border:1px solid var(--line);border-radius:6px;">
+      `);
+    });
+  }
+  drawTable();
+}
+
+/* ============ Aba: Maquinário ============ */
+function renderMaquinario() {
+  const el = document.getElementById('tab-maquinario');
+  el.innerHTML = `
+    <div class="section-title">Equipamentos</div>
+    <div style="margin-bottom:14px;"><button class="btn btn-primary" id="mq-add">+ Novo equipamento</button></div>
+    <div id="mq-form-host"></div>
+    <div class="card table-wrap" style="margin-bottom:24px;">
+      <table><thead><tr><th>Equipamento</th><th>Qtd. total</th><th>Com quem está</th><th>Status</th><th></th></tr></thead><tbody id="mq-tbody"></tbody></table>
+    </div>
+    <div class="section-title">Histórico de movimentações</div>
+    <div class="card table-wrap">
+      <table><thead><tr><th>Data</th><th>Equipamento</th><th>De</th><th>Para</th><th>Status</th><th>Obs.</th></tr></thead><tbody id="mqmov-tbody"></tbody></table>
+    </div>
+  `;
+  function stLabel(s) { return {emuso:'Em uso', manutencao:'Manutenção', disponivel:'Disponível'}[s] || 'Em uso'; }
+  function drawList() {
+    const tb = document.getElementById('mq-tbody');
+    if (!maquinarios.length) { tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--ink-faint);padding:24px;">Nenhum equipamento cadastrado.</td></tr>`; return; }
+    tb.innerHTML = maquinarios.map(q => {
+      const h = holderAtual(q.id);
+      return `<tr>
+        <td>${escapeHtml(q.nome)}</td>
+        <td class="mono-cell">${q.qtdTotal}</td>
+        <td class="holder-badge">${h ? '<b>'+escapeHtml(h.quemEsta)+'</b>' : '<span style="color:var(--ink-faint);">não atribuído</span>'}</td>
+        <td><span class="status-pill ${h && h.status==='manutencao' ? 'status-baixo' : 'status-ok'}">${h ? stLabel(h.status) : 'Disponível'}</span></td>
+        <td><button class="btn btn-ghost btn-sm" data-mov="${q.id}">Movimentar</button> <button class="btn btn-danger btn-sm" data-del="${q.id}">Excluir</button></td>
+      </tr>`;
+    }).join('');
+    tb.querySelectorAll('[data-mov]').forEach(b => b.onclick = () => openMovForm(b.dataset.mov));
+    tb.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      if (!confirm('Excluir este equipamento?')) return;
+      const id = b.dataset.del;
+      maquinarios = maquinarios.filter(x=>x.id!==id);
+      await excluirRegistroStorage('maquinario', id);
+      drawList();
+    });
+  }
+  function drawHist() {
+    const tb = document.getElementById('mqmov-tbody');
+    const list = [...maqMovs].sort((a,b)=>b.data<a.data?-1:1).slice(0,40);
+    if (!list.length) { tb.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--ink-faint);padding:24px;">Nenhuma movimentação registrada.</td></tr>`; return; }
+    tb.innerHTML = list.map(m => {
+      const q = maquinarios.find(x=>x.id===m.maquinarioId);
+      return `<tr>
+        <td class="mono-cell">${fmtDateBR(m.data)}</td>
+        <td>${q?escapeHtml(q.nome):'(excluído)'}</td>
+        <td style="color:var(--ink-soft);">${escapeHtml(m.de||'depósito')}</td>
+        <td>${escapeHtml(m.quemEsta)}</td>
+        <td><span class="status-pill ${m.status==='manutencao'?'status-baixo':'status-ok'}">${stLabel(m.status)}</span></td>
+        <td style="color:var(--ink-soft);">${escapeHtml(m.obs||'—')}</td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('mq-add').onclick = () => {
+    const host = document.getElementById('mq-form-host');
+    host.innerHTML = `
+      <div class="card" style="padding:20px;margin-bottom:16px;max-width:600px;">
+        <h3 style="margin-bottom:12px;">Novo equipamento</h3>
+        <div class="form-grid">
+          <div class="field full"><label>Nome do equipamento</label><input type="text" id="mq-nome" placeholder="Ex: Betoneira 400L"></div>
+          <div class="field"><label>Quantidade total</label><input type="number" id="mq-qtd" min="1" value="1"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="mq-save">Cadastrar</button>
+          <button class="btn btn-ghost" id="mq-cancel">Cancelar</button>
+        </div>
+      </div>`;
+    document.getElementById('mq-cancel').onclick = () => host.innerHTML='';
+    document.getElementById('mq-save').onclick = async () => {
+      const nome = document.getElementById('mq-nome').value.trim();
+      if (!nome) { showToast('Informe o nome do equipamento.'); return; }
+      maquinarios.push({id:genId(), nome, qtdTotal:Number(document.getElementById('mq-qtd').value)||1});
+      await salvarRegistro('maquinario', maquinarios[maquinarios.length-1]);
+      host.innerHTML=''; drawList();
+      showToast('Equipamento cadastrado.');
+    };
+  };
+  function openMovForm(maqId) {
+    const q = maquinarios.find(x=>x.id===maqId);
+    const h = holderAtual(maqId);
+    openModal(`
+      <h3>Movimentar: ${escapeHtml(q.nome)}</h3>
+      <div class="modal-sub">Atualmente com: ${h?escapeHtml(h.quemEsta):'ninguém atribuído'}</div>
+      <div class="form-grid">
+        <div class="field full"><label>Passou de (quem devolveu)</label><input type="text" id="mv2-de" value="${h?escapeHtml(h.quemEsta):''}" placeholder="Deixe em branco se saiu do depósito"></div>
+        <div class="field full"><label>Passou para (novo responsável)</label><input type="text" id="mv2-para" placeholder="Nome de quem vai usar"></div>
+        <div class="field"><label>Data</label><input type="date" id="mv2-data" value="${todayISO()}"></div>
+        <div class="field"><label>Status</label><select id="mv2-status"><option value="emuso">Em uso</option><option value="manutencao">Em manutenção</option><option value="disponivel">Devolvido / disponível</option></select></div>
+        <div class="field full"><label>Observação</label><input type="text" id="mv2-obs" placeholder="Obra/local onde será usado"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="mv2-save">Registrar</button>
+        <button class="btn btn-ghost" id="mv2-cancel">Cancelar</button>
+      </div>
+    `);
+    document.getElementById('mv2-cancel').onclick = closeModal;
+    document.getElementById('mv2-save').onclick = async () => {
+      const quemEsta = document.getElementById('mv2-para').value.trim();
+      const status = document.getElementById('mv2-status').value;
+      if (!quemEsta && status!=='disponivel') { showToast('Informe para quem o equipamento foi passado.'); return; }
+      maqMovs.push({
+        id:genId(), maquinarioId:maqId, de:document.getElementById('mv2-de').value.trim(),
+        quemEsta: quemEsta || 'Depósito', data:document.getElementById('mv2-data').value||todayISO(),
+        status, obs:document.getElementById('mv2-obs').value.trim()
+      });
+      await salvarRegistro('maqmov', maqMovs[maqMovs.length-1]);
+      closeModal();
+      drawList(); drawHist();
+      showToast('Movimentação registrada.');
+    };
+  }
+  drawList(); drawHist();
+}
+
+/* ============ Aba: Atendimento de Campo ============ */
+let atItens = [];
+let atFotosColeta = [];
+let atFotosInstalacao = [];
+let atSigCanvas, atSigCtx, atSigHasDrawing=false, atSigDrawing=false, atSigLastPos=null;
+
+function resizeImageFile(file, maxDim, quality) {
+  maxDim = maxDim || 800; quality = quality || 0.65;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+      else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    }; img.onerror = reject; img.src = e.target.result; };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function handleAtFotos(fileList, destino) {
+  const arr = destino === 'coleta' ? atFotosColeta : atFotosInstalacao;
+  for (const file of Array.from(fileList)) {
+    if (!file.type.startsWith('image/')) continue;
+    try { arr.push(await resizeImageFile(file)); } catch (e) { showToast('Não foi possível processar uma das fotos.'); }
+  }
+  drawAtFotos();
+}
+function drawAtFotos() {
+  ['coleta','instalacao'].forEach(destino => {
+    const arr = destino === 'coleta' ? atFotosColeta : atFotosInstalacao;
+    const host = document.getElementById('at-fotos-'+destino);
+    if (!host) return;
+    host.innerHTML = arr.map((src, i) => `
+      <div class="foto-thumb">
+        <img src="${src}" data-view="${destino}-${i}">
+        <button class="foto-del" data-del="${destino}-${i}">&times;</button>
+      </div>`).join('');
+    host.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+      const idx = Number(b.dataset.del.split('-').pop());
+      arr.splice(idx, 1);
+      drawAtFotos();
+    });
+    host.querySelectorAll('[data-view]').forEach(im => im.onclick = () => {
+      openModal(`<h3>Foto</h3><img src="${im.src}" style="width:100%;border-radius:6px;">`);
+    });
+  });
+}
+function renderAtendimento() {
+  const el = document.getElementById('tab-atendimento');
+  document.getElementById('lista-unidades').innerHTML = listaUnidadesSugeridas().map(u => `<option value="${escapeHtml(u)}">`).join('');
+  el.innerHTML = `
+    <div class="section-title">Novo atendimento de campo</div>
+    <div class="card" style="padding:18px 20px;margin-bottom:24px;">
+      <div class="form-grid">
+        <div class="field"><label>Local do serviço</label><input type="text" id="at-local" list="lista-unidades" placeholder="Ex: USF Bela Vista/Carumbé"></div>
+        <div class="field"><label>Data</label><input type="date" id="at-data" value="${todayISO()}"></div>
+        <div class="field full"><label>Preposto (quem recebeu o serviço na unidade)</label><input type="text" id="at-preposto"></div>
+        <div class="field full">
+          <label>Prestador de serviço</label>
+          <div class="checks-row">
+            ${PRESTADORES_PADRAO.map(p => `<label><input type="checkbox" class="at-prestador" value="${p}" ${p===usuarioAtual?'checked':''}> ${p}</label>`).join('')}
+            <label><input type="checkbox" id="at-prestador-outro-chk" ${usuarioAtual && !PRESTADORES_PADRAO.includes(usuarioAtual)?'checked':''}> Outro:</label>
+            <input type="text" id="at-prestador-outro" placeholder="nome" value="${usuarioAtual && !PRESTADORES_PADRAO.includes(usuarioAtual)?escapeHtml(usuarioAtual):''}" style="width:150px;">
+          </div>
+        </div>
+        <div class="field full">
+          <label>Serviço</label>
+          <div class="checks-row">
+            ${Object.entries(SERVICOS_ATENDIMENTO).map(([k,label]) => `<label><input type="checkbox" class="at-servico" value="${k}"> ${label}</label>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px;">Material utilizado (baixa automática no estoque)</div>
+      <div class="add-item-row">
+        <div class="field" style="margin:0;"><label>Material</label><select id="at-item-material">${optionsMateriais('')}</select></div>
+        <div class="field" style="margin:0;"><label>Quantidade</label><input type="number" id="at-item-qtd" min="1" value="1"></div>
+        <button class="btn btn-primary" id="at-item-add" style="height:34px;">+ Adicionar</button>
+      </div>
+      <div class="item-chip-list" id="at-item-list"></div>
+
+      <div class="section-title" style="margin-top:18px;">Fotos dos itens coletados (retirados do estoque)</div>
+      <label class="foto-upload-btn no-print">+ Adicionar fotos da coleta<input type="file" id="at-foto-coleta-input" accept="image/*" multiple style="display:none;"></label>
+      <div class="foto-grid" id="at-fotos-coleta"></div>
+
+      <div class="section-title" style="margin-top:18px;">Fotos dos itens colocados na intervenção</div>
+      <label class="foto-upload-btn no-print">+ Adicionar fotos da instalação<input type="file" id="at-foto-instalacao-input" accept="image/*" multiple style="display:none;"></label>
+      <div class="foto-grid" id="at-fotos-instalacao"></div>
+
+      <div class="section-title" style="margin-top:18px;">Observação e responsável</div>
+      <div class="form-grid">
+        <div class="field full"><label>Observação</label><textarea id="at-observacao" placeholder="O que foi feito, pendências, próximos passos..."></textarea></div>
+        <div class="field full"><label>Responsável (assinatura)</label>
+          <div class="sig-wrap"><canvas class="sig" id="at-sig-pad"></canvas>
+            <div class="sig-actions"><span>Assine com o mouse ou o dedo</span><button class="btn btn-ghost btn-sm" id="at-sig-clear">Limpar</button></div>
+          </div>
+        </div>
+        <div class="field full"><label>Nome do responsável</label><input type="text" id="at-responsavel-nome" value="${escapeHtml(usuarioAtual||'')}"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="at-save">Salvar atendimento</button>
+        <button class="btn btn-ghost" id="at-clear">Limpar formulário</button>
+      </div>
+    </div>
+
+    <div class="section-title">Relatórios</div>
+    <div class="card" style="padding:16px 18px;margin-bottom:20px;">
+      <div class="filters-grid" style="margin-bottom:12px;">
+        <div class="field"><label>De</label><input type="date" id="rel-de"></div>
+        <div class="field"><label>Até</label><input type="date" id="rel-ate"></div>
+        <div class="field"><label>Unidade (opcional)</label><input type="text" id="rel-unidade" list="lista-unidades" placeholder="Todas"></div>
+      </div>
+      <div class="checks-row" style="margin-bottom:10px;">
+        <label><input type="checkbox" id="rel-incluir-fotos" checked> Incluir fotos no relatório impresso</label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="rel-imprimir">Gerar relatório consolidado (imprimir / salvar PDF)</button>
+        <button class="btn" id="rel-csv">Exportar CSV</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-faint);margin-top:8px;">Deixe as datas em branco para incluir todos os atendimentos registrados.</div>
+    </div>
+
+    <div class="section-title">Atendimentos registrados</div>
+    <div id="at-list-host"></div>
+  `;
+
+  atItens = []; atFotosColeta = []; atFotosInstalacao = [];
+  drawAtItens(); drawAtFotos();
+  initAtSignaturePad();
+
+  document.getElementById('at-item-add').onclick = () => {
+    const materialId = document.getElementById('at-item-material').value;
+    const quantidade = Number(document.getElementById('at-item-qtd').value);
+    if (!materialId) { showToast('Selecione um material.'); return; }
+    if (!quantidade || quantidade <= 0) { showToast('Informe uma quantidade válida.'); return; }
+    atItens.push({materialId, quantidade});
+    document.getElementById('at-item-qtd').value = 1;
+    drawAtItens();
+  };
+  document.getElementById('at-foto-coleta-input').onchange = (e) => handleAtFotos(e.target.files, 'coleta');
+  document.getElementById('at-foto-instalacao-input').onchange = (e) => handleAtFotos(e.target.files, 'instalacao');
+  document.getElementById('at-sig-clear').onclick = () => { atSigCtx.clearRect(0,0,atSigCanvas.width,atSigCanvas.height); atSigHasDrawing=false; };
+  document.getElementById('at-clear').onclick = () => renderAtendimento();
+  document.getElementById('at-save').onclick = salvarAtendimento;
+  document.getElementById('rel-imprimir').onclick = gerarRelatorioConsolidado;
+  document.getElementById('rel-csv').onclick = exportarAtendimentosCSV;
+
+  drawAtList();
+}
+function drawAtItens() {
+  const host = document.getElementById('at-item-list');
+  if (!host) return;
+  if (!atItens.length) { host.innerHTML = `<div style="font-size:12.5px;color:var(--ink-faint);padding:4px 0;">Nenhum item adicionado ainda.</div>`; return; }
+  host.innerHTML = atItens.map((it, i) => {
+    const mat = materiais.find(m => m.id === it.materialId);
+    const atual = mat ? estoqueAtual(mat.id) : 0;
+    const low = mat && it.quantidade > atual;
+    return `<div class="item-chip">
+      <span>${it.quantidade}× ${mat ? escapeHtml(mat.nome) : '(material excluído)'}${low ? '<span class="warn-low">acima do estoque atual ('+atual+')</span>' : ''}</span>
+      <span class="remover" data-rm="${i}">remover</span>
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { atItens.splice(Number(b.dataset.rm), 1); drawAtItens(); });
+}
+function initAtSignaturePad() {
+  atSigCanvas = document.getElementById('at-sig-pad');
+  if (!atSigCanvas) return;
+  const ratio = Math.min(window.devicePixelRatio || 1, 1.3);
+  const cssW = atSigCanvas.clientWidth || 400;
+  atSigCanvas.width = cssW*ratio; atSigCanvas.height = 110*ratio;
+  atSigCtx = atSigCanvas.getContext('2d');
+  atSigCtx.scale(ratio,ratio);
+  atSigCtx.lineWidth = 2; atSigCtx.lineCap='round'; atSigCtx.strokeStyle='#1B2430';
+  atSigHasDrawing = false;
+  function pos(e) { const r=atSigCanvas.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return {x:p.clientX-r.left, y:p.clientY-r.top}; }
+  function start(e) { atSigDrawing=true; atSigLastPos=pos(e); e.preventDefault(); }
+  function move(e) { if(!atSigDrawing) return; const p=pos(e); atSigCtx.beginPath(); atSigCtx.moveTo(atSigLastPos.x,atSigLastPos.y); atSigCtx.lineTo(p.x,p.y); atSigCtx.stroke(); atSigLastPos=p; atSigHasDrawing=true; e.preventDefault(); }
+  function end() { atSigDrawing=false; }
+  atSigCanvas.addEventListener('mousedown',start);
+  atSigCanvas.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+  atSigCanvas.addEventListener('touchstart',start,{passive:false});
+  atSigCanvas.addEventListener('touchmove',move,{passive:false});
+  atSigCanvas.addEventListener('touchend',end);
+}
+async function salvarAtendimento() {
+  const local = document.getElementById('at-local').value.trim();
+  const data = document.getElementById('at-data').value || todayISO();
+  if (!local) { showToast('Informe o local do serviço.'); return; }
+  if (!atItens.length && !atFotosColeta.length && !atFotosInstalacao.length) {
+    showToast('Adicione ao menos um material ou uma foto.'); return;
+  }
+  const prestadores = Array.from(document.querySelectorAll('.at-prestador:checked')).map(c => c.value);
+  if (document.getElementById('at-prestador-outro-chk').checked) {
+    const outro = document.getElementById('at-prestador-outro').value.trim();
+    if (outro) prestadores.push(outro);
+  }
+  const id = genId();
+  const responsavelNome = document.getElementById('at-responsavel-nome').value.trim();
+  const temAssinatura = atSigHasDrawing;
+  const assinaturaDataUrl = atSigHasDrawing ? atSigCanvas.toDataURL('image/png') : '';
+  const servicos = Array.from(document.querySelectorAll('.at-servico:checked')).map(c => c.value);
+  const atendimento = {
+    id, local, data,
+    preposto: document.getElementById('at-preposto').value.trim(),
+    prestadores,
+    servicos,
+    itens: atItens.map(it => ({materialId: it.materialId, quantidade: it.quantidade})),
+    observacao: document.getElementById('at-observacao').value.trim(),
+    responsavelNome,
+    temAssinatura,
+    temFotoColeta: atFotosColeta.length > 0,
+    temFotoInstalacao: atFotosInstalacao.length > 0,
+    registradoPor: usuarioAtual || '',
+    criadoEm: new Date().toISOString()
+  };
+  atendimentos.push(atendimento);
+  const movsNovos = atItens.map(it => ({
+    id: genId(), tipo:'saida', materialId: it.materialId, quantidade: it.quantidade, data,
+    quem: responsavelNome || prestadores.join(', ') || '—',
+    destino: local,
+    finalidade: 'Atendimento de campo' + (atendimento.observacao ? ' — ' + atendimento.observacao : ''),
+    atendimentoId: id, registradoPor: usuarioAtual || ''
+  }));
+  movimentacoes.push(...movsNovos);
+  await salvarRegistro('atendimento', atendimento);
+  await salvarEmLote(movsNovos, 'mov');
+  let fotosSalvas = true, assinaturaSalva = true;
+  if (atFotosColeta.length || atFotosInstalacao.length) {
+    fotosSalvas = await salvarFotosComVerificacao(id, atFotosColeta, atFotosInstalacao);
+  }
+  if (temAssinatura) {
+    assinaturaSalva = await salvarAssinaturaComVerificacao(id, assinaturaDataUrl);
+  }
+  let msg = 'Atendimento registrado.';
+  if (!fotosSalvas && !assinaturaSalva) msg = 'Atendimento salvo, mas as fotos e a assinatura não puderam ser confirmadas — abra em "Ver" para conferir.';
+  else if (!fotosSalvas) msg = 'Atendimento salvo, mas não foi possível confirmar as fotos — abra em "Ver" para conferir.';
+  else if (!assinaturaSalva) msg = 'Atendimento salvo, mas não foi possível confirmar a assinatura — abra em "Ver" para conferir.';
+  showToast(msg, (fotosSalvas && assinaturaSalva) ? 2600 : 8000);
+  renderAtendimento();
+}
+function drawAtList() {
+  const host = document.getElementById('at-list-host');
+  if (!atendimentos.length) { host.innerHTML = `<div class="card empty-state"><h3>Nenhum atendimento registrado</h3><p>Preencha o formulário acima para começar.</p></div>`; return; }
+  const list = [...atendimentos].sort((a,b) => b.data < a.data ? -1 : 1);
+  host.innerHTML = list.map(at => {
+    const tags = at.servicos.map(s => `<span class="tag-servico">${escapeHtml(SERVICOS_ATENDIMENTO[s]||s)}</span>`).join(' ');
+    const itensResumo = at.itens.map(it => {
+      const mat = materiais.find(m => m.id === it.materialId);
+      return `${it.quantidade}× ${mat ? escapeHtml(mat.nome) : '(excluído)'}`;
+    }).join('; ') || 'sem materiais registrados';
+    const fotoTag = (at.temFotoColeta || at.temFotoInstalacao) ? `<span class="tag-cat tag-outros">📷 fotos</span>` : '';
+    return `<div class="card at-card">
+      <div class="at-head">
+        <div>
+          <div class="at-local">${escapeHtml(at.local)}</div>
+          <div class="at-meta">${fmtDateBR(at.data)} · ${escapeHtml(at.prestadores.join(', ') || '—')}${at.registradoPor ? ' · registrado por '+escapeHtml(at.registradoPor) : ''}</div>
+          <div class="at-meta">${itensResumo}</div>
+          <div class="at-tags">${tags} ${fotoTag}</div>
+        </div>
+        <div class="at-actions no-print">
+          <button class="btn btn-ghost btn-sm" data-ver="${at.id}">Ver</button>
+          <button class="btn btn-danger btn-sm" data-del="${at.id}">Excluir</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => verAtendimento(b.dataset.ver));
+  host.querySelectorAll('[data-del]').forEach(b => b.onclick = () => excluirAtendimento(b.dataset.del));
+}
+/* Fotos e assinatura agora ficam em arquivos de verdade no Supabase
+   Storage (não mais texto base64 dentro do banco) — e como o atendimento
+   já vem carregado com essas URLs (colunas fotos_coleta/fotos_instalacao/
+   assinatura_url), não precisa nem buscar de novo: só olhar o que já
+   está em memória. */
+async function carregarFotosAtendimento(id) {
+  const at = atendimentos.find(a => a.id === id);
+  return at ? {coleta: at.fotosColeta||[], instalacao: at.fotosInstalacao||[]} : {coleta:[], instalacao:[]};
+}
+async function carregarAssinaturaAtendimento(id) {
+  const at = atendimentos.find(a => a.id === id);
+  return at ? (at.assinaturaUrl || '') : '';
+}
+async function dataUrlParaBlob(dataUrl) {
+  const resposta = await fetch(dataUrl);
+  return await resposta.blob();
+}
+async function uploadImagem(bucket, dataUrl, caminho) {
+  try {
+    const blob = await dataUrlParaBlob(dataUrl);
+    const { error } = await sb.storage.from(bucket).upload(caminho, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
+    if (error) return null;
+    const { data } = sb.storage.from(bucket).getPublicUrl(caminho);
+    return data ? data.publicUrl : null;
+  } catch (e) { return null; }
+}
+async function salvarFotosComVerificacao(id, coleta, instalacao) {
+  const urlsColeta = [];
+  for (let i = 0; i < coleta.length; i++) {
+    const url = await uploadImagem('fotos-atendimento', coleta[i], `${id}/coleta-${i}-${Date.now()}.jpg`);
+    if (url) urlsColeta.push(url);
+  }
+  const urlsInstalacao = [];
+  for (let i = 0; i < instalacao.length; i++) {
+    const url = await uploadImagem('fotos-atendimento', instalacao[i], `${id}/instalacao-${i}-${Date.now()}.jpg`);
+    if (url) urlsInstalacao.push(url);
+  }
+  const tudoSubiu = urlsColeta.length === coleta.length && urlsInstalacao.length === instalacao.length;
+  const { error } = await sb.from('atendimentos').update({ fotos_coleta: urlsColeta, fotos_instalacao: urlsInstalacao }).eq('id', id);
+  const at = atendimentos.find(a => a.id === id);
+  if (at) { at.fotosColeta = urlsColeta; at.fotosInstalacao = urlsInstalacao; }
+  return tudoSubiu && !error;
+}
+async function salvarAssinaturaComVerificacao(id, dataUrl) {
+  const url = await uploadImagem('assinaturas', dataUrl, `${id}-${Date.now()}.png`);
+  if (!url) return false;
+  const { error } = await sb.from('atendimentos').update({ assinatura_url: url }).eq('id', id);
+  const at = atendimentos.find(a => a.id === id);
+  if (at) at.assinaturaUrl = url;
+  return !error;
+}
+async function verAtendimento(id) {
+  const at = atendimentos.find(x => x.id === id);
+  if (!at) return;
+  const [fotos, assinatura] = await Promise.all([
+    carregarFotosAtendimento(id),
+    at.temAssinatura ? carregarAssinaturaAtendimento(id) : Promise.resolve('')
+  ]);
+  const itensHtml = at.itens.map(it => {
+    const mat = materiais.find(m => m.id === it.materialId);
+    return `<div class="resumo-item" style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--line-soft);">
+      <span>${mat ? escapeHtml(mat.nome) : '(material excluído)'}</span><b>${it.quantidade}</b>
+    </div>`;
+  }).join('') || '<div style="font-size:12.5px;color:var(--ink-faint);">Nenhum material registrado.</div>';
+  const galeria = (titulo, arr) => `
+    <div style="margin-top:12px;">
+      <div class="section-title" style="margin-bottom:6px;">${titulo}</div>
+      ${arr.length ? `<div class="foto-grid">${arr.map(src => `<div class="foto-thumb"><img src="${src}"></div>`).join('')}</div>` : '<div style="font-size:12.5px;color:var(--ink-faint);">Sem fotos.</div>'}
+    </div>`;
+  openModal(`
+    <h3>${escapeHtml(at.local)}</h3>
+    <div class="modal-sub">${fmtDateBR(at.data)} · Preposto: ${escapeHtml(at.preposto||'—')} · Prestador(es): ${escapeHtml(at.prestadores.join(', ')||'—')}${at.registradoPor ? ' · registrado por '+escapeHtml(at.registradoPor) : ''}</div>
+    <div class="section-title">Materiais utilizados</div>
+    ${itensHtml}
+    ${galeria('Fotos da coleta (retirada do estoque)', fotos.coleta)}
+    ${galeria('Fotos da instalação/intervenção', fotos.instalacao)}
+    <div class="section-title" style="margin-top:12px;">Observação</div>
+    <div style="font-size:13px;">${escapeHtml(at.observacao||'—')}</div>
+    ${at.assinatura ? `<div class="section-title" style="margin-top:12px;">Assinatura do responsável</div><img src="${at.assinatura}" style="height:60px;border:1px solid var(--line);border-radius:4px;">` : (assinatura ? `<div class="section-title" style="margin-top:12px;">Assinatura do responsável</div><img src="${assinatura}" style="height:60px;border:1px solid var(--line);border-radius:4px;">` : (at.temAssinatura ? '<div style="font-size:12px;color:#a33;margin-top:8px;">Assinatura não pôde ser carregada.</div>' : ''))}
+    <div class="form-actions">
+      <button class="btn btn-primary" id="at-print-btn">Imprimir relatório</button>
+    </div>
+  `);
+  document.getElementById('at-print-btn').onclick = () => imprimirAtendimento(at, fotos, assinatura);
+}
+function imprimirAtendimento(at, fotos, assinatura) {
+  document.getElementById('print-area-atendimento').innerHTML = montarBlocoRelatorioAtendimento(at, fotos, true, true, assinatura);
+  document.body.classList.add('print-atendimento');
+  window.print();
+}
+function montarBlocoRelatorioAtendimento(at, fotos, incluirFotos, primeiroDaLista, assinatura) {
+  const itensHtml = at.itens.map(it => {
+    const mat = materiais.find(m => m.id === it.materialId);
+    return `<tr><td>${mat ? escapeHtml(mat.nome) : '(excluído)'}</td><td>${it.quantidade}</td></tr>`;
+  }).join('') || '<tr><td colspan="2">Nenhum material registrado.</td></tr>';
+  const galeria = (titulo, arr) => `<h2>${titulo}</h2>${arr.length ? `<div class="pf-photos">${arr.map(src=>`<img src="${src}">`).join('')}</div>` : '<p>Sem fotos.</p>'}`;
+  return `
+    <div class="pf-report" style="${primeiroDaLista ? '' : 'page-break-before:always;'}">
+      <h1>Relatório de Atendimento de Campo — CTOSM/SMS Cuiabá</h1>
+      <div class="pf-meta-grid">
+        <div><b>Local:</b> ${escapeHtml(at.local)}</div>
+        <div><b>Data:</b> ${fmtDateBR(at.data)}</div>
+        <div><b>Preposto:</b> ${escapeHtml(at.preposto||'—')}</div>
+        <div><b>Prestador(es):</b> ${escapeHtml(at.prestadores.join(', ')||'—')}</div>
+        <div><b>Serviço:</b> ${at.servicos.map(s => SERVICOS_ATENDIMENTO[s]||s).join(' / ')||'—'}</div>
+        <div><b>Responsável:</b> ${escapeHtml(at.responsavelNome||'—')}</div>
+        ${at.registradoPor ? `<div><b>Registrado por:</b> ${escapeHtml(at.registradoPor)}</div>` : ''}
+      </div>
+      <h2>Materiais utilizados</h2>
+      <table><thead><tr><th>Material</th><th>Quantidade</th></tr></thead><tbody>${itensHtml}</tbody></table>
+      ${incluirFotos ? galeria('Fotos da coleta (retirada do estoque)', fotos.coleta) : ''}
+      ${incluirFotos ? galeria('Fotos da instalação/intervenção', fotos.instalacao) : ''}
+      <h2>Observação</h2>
+      <p>${escapeHtml(at.observacao||'—')}</p>
+      ${(assinatura || at.assinatura) ? `<h2>Assinatura do responsável</h2><img src="${assinatura||at.assinatura}" style="height:60px;">` : ''}
+    </div>
+  `;
+}
+function filtrarAtendimentosRelatorio() {
+  const de = document.getElementById('rel-de').value;
+  const ate = document.getElementById('rel-ate').value;
+  const unidade = document.getElementById('rel-unidade').value.trim().toLowerCase();
+  return atendimentos.filter(at => {
+    if (de && at.data < de) return false;
+    if (ate && at.data > ate) return false;
+    if (unidade && !at.local.toLowerCase().includes(unidade)) return false;
+    return true;
+  }).sort((a,b) => a.data < b.data ? -1 : 1);
+}
+async function gerarRelatorioConsolidado() {
+  const lista = filtrarAtendimentosRelatorio();
+  if (!lista.length) { showToast('Nenhum atendimento encontrado para esse filtro.'); return; }
+  const incluirFotos = document.getElementById('rel-incluir-fotos').checked;
+  if (incluirFotos && lista.length > 15) {
+    if (!confirm(`${lista.length} atendimentos selecionados com fotos — o relatório pode ficar grande e demorar para gerar. Continuar?`)) return;
+  }
+  showToast('Gerando relatório...');
+  const blocos = [];
+  let falhasFotos = 0;
+  for (let i = 0; i < lista.length; i++) {
+    const at = lista[i];
+    const fotos = incluirFotos ? await carregarFotosAtendimento(at.id) : {coleta:[], instalacao:[]};
+    const assinatura = at.temAssinatura ? await carregarAssinaturaAtendimento(at.id) : '';
+    if (incluirFotos && (at.temFotoColeta || at.temFotoInstalacao) && !fotos.coleta.length && !fotos.instalacao.length) {
+      falhasFotos++;
+    }
+    blocos.push(montarBlocoRelatorioAtendimento(at, fotos, incluirFotos, i === 0, assinatura));
+  }
+  const de = document.getElementById('rel-de').value;
+  const ate = document.getElementById('rel-ate').value;
+  const avisoFalha = falhasFotos
+    ? `<div class="pf-report"><p style="color:#a33;"><b>Atenção:</b> não foi possível carregar as fotos de ${falhasFotos} atendimento(s) que deveriam ter foto. Tente gerar o relatório de novo em alguns instantes.</p></div>`
+    : '';
+  const capa = `
+    <div class="pf-report">
+      <h1>Relatório Consolidado de Atendimentos de Campo — CTOSM/SMS Cuiabá</h1>
+      <div class="pf-meta-grid">
+        <div><b>Período:</b> ${de ? fmtDateBR(de) : 'início'} a ${ate ? fmtDateBR(ate) : 'hoje'}</div>
+        <div><b>Total de atendimentos:</b> ${lista.length}</div>
+        <div><b>Gerado em:</b> ${fmtDateBR(todayISO())}</div>
+      </div>
+    </div>
+    ${avisoFalha}
+  `;
+  document.getElementById('print-area-atendimento').innerHTML = capa + blocos.join('');
+  document.body.classList.add('print-atendimento');
+  window.print();
+}
+function exportarAtendimentosCSV() {
+  const lista = filtrarAtendimentosRelatorio();
+  if (!lista.length) { showToast('Nenhum atendimento encontrado para esse filtro.'); return; }
+  const rows = [['Data','Local','Preposto','Prestadores','Servico','Materiais','Observacao','Responsavel','RegistradoPor','TemFotoColeta','TemFotoInstalacao']];
+  lista.forEach(at => {
+    const materiaisTxt = at.itens.map(it => {
+      const mat = materiais.find(m => m.id === it.materialId);
+      return `${it.quantidade}x ${mat ? mat.nome : '(excluído)'}`;
+    }).join('; ');
+    rows.push([
+      fmtDateBR(at.data), at.local, at.preposto||'', at.prestadores.join(', '),
+      at.servicos.map(s => SERVICOS_ATENDIMENTO[s]||s).join('/'),
+      materiaisTxt, at.observacao||'', at.responsavelNome||'', at.registradoPor||'',
+      at.temFotoColeta?'Sim':'Não', at.temFotoInstalacao?'Sim':'Não'
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'atendimentos_campo_' + todayISO() + '.csv';
+  a.click();
+}
+window.addEventListener('afterprint', () => document.body.classList.remove('print-atendimento'));
+async function excluirArquivoPorUrl(bucket, url) {
+  if (!url) return;
+  const marcador = `/public/${bucket}/`;
+  const idx = url.indexOf(marcador);
+  if (idx === -1) return;
+  try { await sb.storage.from(bucket).remove([decodeURIComponent(url.slice(idx + marcador.length))]); } catch (e) {}
+}
+async function excluirAtendimento(id) {
+  if (!confirm('Excluir este atendimento? As saídas de estoque associadas a ele também serão revertidas.')) return;
+  const at = atendimentos.find(x => x.id === id);
+  const idsMovsParaExcluir = movimentacoes.filter(m => m.atendimentoId === id).map(m => m.id);
+  atendimentos = atendimentos.filter(x => x.id !== id);
+  movimentacoes = movimentacoes.filter(m => m.atendimentoId !== id);
+  await Promise.all([
+    excluirRegistroStorage('atendimento', id),
+    ...idsMovsParaExcluir.map(mid => excluirRegistroStorage('mov', mid))
+  ]);
+  if (at) {
+    await Promise.all([
+      ...(at.fotosColeta||[]).map(u => excluirArquivoPorUrl('fotos-atendimento', u)),
+      ...(at.fotosInstalacao||[]).map(u => excluirArquivoPorUrl('fotos-atendimento', u)),
+      excluirArquivoPorUrl('assinaturas', at.assinaturaUrl)
+    ]);
+  }
+  showToast('Atendimento excluído e estoque revertido.');
+  drawAtList();
+  updateHeaderMeta();
+}
+
+/* ============ Init ============ */
+(async function init() {
+  await carregarIdentidade();
+  await loadData();
+  render();
+  ligarTempoReal();
+  document.getElementById('btn-atualizar').onclick = recarregarTudo;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !haRascunhoAtendimentoEmAndamento()) recarregarTudo();
+  });
+  if (!usuarioAtual) abrirSeletorIdentidade();
+})();
+</script>
+</body>
+</html>
