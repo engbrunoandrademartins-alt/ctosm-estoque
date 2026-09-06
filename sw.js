@@ -1,4 +1,4 @@
-self.addEventListener('install', () => {
+self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
@@ -6,8 +6,6 @@ self.addEventListener('activate', event => {
   event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', () => {
-  // Não intercepta nenhuma requisição.
-  // O navegador acessará diretamente GitHub,
-  // Supabase, CDN e demais serviços.
+self.addEventListener('fetch', event => {
+  // Não interceptar nenhuma requisição.
 });
