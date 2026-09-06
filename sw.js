@@ -1,11 +1,13 @@
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(self.clients.claim());
 });
 
+// Não intercepta nenhuma requisição.
+// GitHub Pages, Supabase e CDN acessam diretamente.
 self.addEventListener('fetch', event => {
-  // Não interceptar nenhuma requisição.
+  return;
 });
