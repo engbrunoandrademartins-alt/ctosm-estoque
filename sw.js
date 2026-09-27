@@ -1,6 +1,6 @@
 /* Service worker do Controle de Estoque — guarda só os arquivos do app
    (tela, ícones), nunca os dados: estes vêm sempre do Supabase. */
-const CACHE = 'estoque-ctosm-v1';
+const CACHE = 'estoque-ctosm-v3';
 const ARQUIVOS = ['./', './index.html', './supabase-config.js', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png', './favicon-32.png'];
 
